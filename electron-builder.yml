@@ -1,0 +1,52 @@
+appId: com.vaultline.lite
+productName: VaultLine Lite
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!e2e/*'
+  - '!docs/*'
+  - '!{.eslintrc.cjs,.prettierrc,electron.vite.config.ts}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - resources/**
+win:
+  executableName: VaultLineLite
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: VaultLine Lite
+  uninstallDisplayName: VaultLine Lite
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+mac:
+  executableName: VaultLineLite
+  target:
+    - target: dmg
+      arch:
+        - universal
+  entitlementsInherit: build/entitlements.mac.plist
+linux:
+  executableName: vaultline-lite
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Office
+protocols:
+  - name: VaultLine Local
+    schemes:
+      - docvault
+publish:
+  provider: generic
+  url: https://update.vaultline.local

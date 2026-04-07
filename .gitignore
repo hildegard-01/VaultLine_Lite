@@ -1,0 +1,44 @@
+# 의존성
+node_modules/
+
+# 빌드 산출물
+out/
+dist/
+
+# 환경 설정
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
+npm-debug.log*
+
+# 테스트
+/test-results/
+/playwright-report/
+/blob-report/
+
+# 데이터 (개발 시 생성)
+dev-data/
+*.db
+*.db-journal
+*.db-wal
+
+# 캐시
+.eslintcache
+*.tsbuildinfo
+
+# Claude Code
+.claude/

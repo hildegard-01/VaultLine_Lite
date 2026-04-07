@@ -1,0 +1,15 @@
+{
+  "server": {
+    "url": "",
+    "autoConnect": false,
+    "retryIntervalSec": 30,
+    "sync": {
+      "pushCommitMeta": true,
+      "pushPreviewOnCommit": true,
+      "previewPushMaxSizeMB": 50,
+      "previewPushFormats": ["docx", "xlsx", "pptx", "pdf", "hwp"],
+      "allowFileProxy": true
+    },
+    "heartbeatIntervalSec": 60
+  }
+}

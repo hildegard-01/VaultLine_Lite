@@ -1,0 +1,63 @@
+import type Database from 'better-sqlite3'
+import { SCHEMA_VERSION } from './schema'
+
+/**
+ * DB 마이그레이션 관리
+ * app_settings 테이블의 schema_version 키로 현재 버전 추적
+ */
+
+// 마이그레이션 함수 타입
+type MigrationFn = (db: Database.Database) => void
+
+// 버전별 마이그레이션 정의 (버전 1→2, 2→3, ...)
+// 현재는 초기 버전이므로 비어 있음. 스키마 변경 시 여기에 추가.
+const migrations: Record<number, MigrationFn> = {
+  // 예시: 버전 1 → 2 마이그레이션
+  // 2: (db) => {
+  //   db.exec('ALTER TABLE repositories ADD COLUMN sharing_enabled BOOLEAN DEFAULT 0')
+  // }
+}
+
+/** 현재 DB의 스키마 버전을 조회 */
+export function getSchemaVersion(db: Database.Database): number {
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined
+    return row ? parseInt(row.value, 10) : 0
+  } catch {
+    // app_settings 테이블이 없는 경우 (최초 생성 전)
+    return 0
+  }
+}
+
+/** 스키마 버전을 기록 */
+export function setSchemaVersion(db: Database.Database, version: number): void {
+  db.prepare(
+    `INSERT INTO app_settings (key, value, updated_at)
+     VALUES ('schema_version', ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+  ).run(String(version))
+}
+
+/** 필요한 마이그레이션을 순서대로 실행 */
+export function runMigrations(db: Database.Database): void {
+  const currentVersion = getSchemaVersion(db)
+
+  if (currentVersion >= SCHEMA_VERSION) {
+    return // 최신 버전, 마이그레이션 불필요
+  }
+
+  // 마이그레이션을 트랜잭션으로 실행
+  const migrate = db.transaction(() => {
+    for (let v = currentVersion + 1; v <= SCHEMA_VERSION; v++) {
+      const migrationFn = migrations[v]
+      if (migrationFn) {
+        migrationFn(db)
+      }
+    }
+    setSchemaVersion(db, SCHEMA_VERSION)
+  })
+
+  migrate()
+}
