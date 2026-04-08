@@ -15,6 +15,20 @@
 
 ---
 
+## Phase A-2 — V2 UI 선행 복원 (진행 예정)
+
+VaultLine 서버 V2 풀 UI를 Lite에 복원. 서버 기능은 placeholder로 비활성.
+상세 계획: `docs2/V2_UI_복원_계획서.md`
+
+- [ ] A2-1. V2 디자인 시스템 기반 (theme.ts, Icons.tsx, useMode 훅)
+- [ ] A2-2. 레이아웃 교체 (ShellV2, HeaderV2, SidebarV2) — 기존 layout은 참조용 유지
+- [ ] A2-3. FileDetailPage (5탭: 프리뷰, 이력, Diff, 결재-비활성, 태그)
+- [ ] A2-4. 로컬 동작 페이지 (ActivityPage, BookmarksPage, TagsPage)
+- [ ] A2-5. 서버 전용 placeholder (공유, 결재, 알림, 관리자)
+- [ ] A2-6. 라우팅 통합 + 안정화
+
+---
+
 ## Phase B — 경량 서버 개발 (6~8주, 별도 프로젝트)
 
 앱과 완전히 별도 저장소에서 서버를 개발. 앱 코드와 무관.

@@ -86,6 +86,14 @@ VaultLine_Lite/
 └── electron.vite.config.ts
 ```
 
+### 참고: V2 UI 복원 진행 예정
+
+- 상세 계획: `docs2/V2_UI_복원_계획서.md`
+- VaultLine V2 디자인 소스: `C:\dev\VaultLine\frontend\src\components\v2\`
+- VaultLine V2 페이지 소스: `C:\dev\VaultLine\frontend\src\pages\v2\`
+- **기존 layout 컴포넌트 (Shell.tsx, Header.tsx, Sidebar.tsx)는 참조용으로 유지** — 삭제하지 않음
+- 신규 V2 컴포넌트는 인라인 스타일 + theme.ts 사용 (기존 Tailwind 컴포넌트는 변경하지 않음)
+
 ---
 
 ## 3. 이중 모드 아키텍처 (핵심)
