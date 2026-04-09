@@ -120,6 +120,17 @@ export async function uploadAndCommit(
     applyAutoLockRules(repoId, relPath)
   }
 
+  // 서버 동기화 hook (커넥티드 모드일 때만)
+  try {
+    const { RepoSyncService } = require('./server/RepoSyncService')
+    RepoSyncService.pushCommit({
+      repoId, revision: finalRevision, author: 'local',
+      message: commitMessage, date: new Date().toISOString(),
+      changedFiles: filePaths.map(f => ({ action: 'A', path: targetPath ? `${targetPath}/${basename(f)}` : basename(f), size: 0 })),
+      fileTreeSnapshot: [],
+    })
+  } catch { /* 서버 미연결 시 무시 */ }
+
   return { revision: finalRevision }
 }
 

@@ -241,4 +241,14 @@ CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
 CREATE INDEX IF NOT EXISTS idx_svn_locks_repo ON svn_locks(repo_id, repo_type);
 CREATE INDEX IF NOT EXISTS idx_search_meta_repo ON search_metadata(repo_id);
 CREATE INDEX IF NOT EXISTS idx_preview_cache_repo ON preview_cache(repo_id);
+
+-- ═══ 서버 동기화 큐 (Phase C) ═══
+CREATE TABLE IF NOT EXISTS server_sync_queue (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id    INTEGER NOT NULL,
+    revision   INTEGER NOT NULL,
+    payload    TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repo_id, revision)
+);
 `

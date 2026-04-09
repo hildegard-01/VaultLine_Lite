@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useParams, useOutletContext, useLocation } from 'react-router-dom'
+import { useParams, useOutletContext, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@renderer/services/ipcClient'
 import { FileToolbar } from '@renderer/components/files/FileToolbar'
@@ -12,6 +12,7 @@ import { InputModal } from '@renderer/components/modals/InputModal'
 import { ShareModal } from '@renderer/components/modals/ShareModal'
 import { PreviewModal } from '@renderer/components/modals/PreviewModal'
 import { LockRulesModal } from '@renderer/components/modals/LockRulesModal'
+import { MoveModal } from '@renderer/components/modals/MoveModal'
 import type { FileEntry, PendingChange } from '@shared/types/ipc'
 
 export function FilesPage(): React.JSX.Element {
@@ -19,6 +20,7 @@ export function FilesPage(): React.JSX.Element {
   const context = useOutletContext<{ showRightPanel: boolean }>()
   const queryClient = useQueryClient()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
   const [currentPath, setCurrentPathRaw] = useState('')
@@ -420,6 +422,14 @@ export function FilesPage(): React.JSX.Element {
     }
   }, [checkedPaths, numRepoId, queryClient])
 
+  // 일괄 이동 모달
+  const [showMoveModal, setShowMoveModal] = useState(false)
+
+  const handleBulkMove = useCallback(() => {
+    if (checkedPaths.size === 0) return
+    setShowMoveModal(true)
+  }, [checkedPaths])
+
   // 일괄 공유용 파일 목록
   const [shareFiles, setShareFiles] = useState<FileEntry[]>([])
 
@@ -572,6 +582,7 @@ export function FilesPage(): React.JSX.Element {
           onNewFolder={handleNewFolder}
           onLockRules={() => setShowLockRules(true)}
           onBulkDelete={handleBulkDelete}
+          onBulkMove={handleBulkMove}
           onBulkLock={handleBulkLock}
           onBulkShare={handleBulkShare}
           onClearChecked={() => setCheckedPaths(new Set())}
@@ -625,6 +636,7 @@ export function FilesPage(): React.JSX.Element {
           onRestoreVersion={handleRestoreVersion}
           onClearSelection={() => setSelectedFile(null)}
           onTagsChanged={() => setTagVersion(v => v + 1)}
+          onDetail={(file) => navigate(`/file/${repoId}?path=${encodeURIComponent(file.path)}`)}
         />
       )}
 
@@ -656,6 +668,20 @@ export function FilesPage(): React.JSX.Element {
 
       {showLockRules && (
         <LockRulesModal onClose={() => setShowLockRules(false)} />
+      )}
+
+      {showMoveModal && (
+        <MoveModal
+          repoId={numRepoId}
+          srcPaths={Array.from(checkedPaths)}
+          onDone={() => {
+            setShowMoveModal(false)
+            setCheckedPaths(new Set())
+            queryClient.invalidateQueries({ queryKey: ['file:list'] })
+            queryClient.invalidateQueries({ queryKey: ['repo:list'] })
+          }}
+          onClose={() => setShowMoveModal(false)}
+        />
       )}
 
       {showPendingCommitModal && (

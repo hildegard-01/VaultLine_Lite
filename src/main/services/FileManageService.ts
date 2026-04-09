@@ -1,6 +1,7 @@
-import { join } from 'path'
+import { join, basename } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { copyFileSync, mkdirSync, statSync, readdirSync, existsSync } from 'fs'
 import { getDatabase } from './DatabaseService'
 import * as SvnService from './SvnService'
 import { getSvnPath, getSvnEnv, toFileUrl } from './SvnPathHelper'
@@ -217,4 +218,106 @@ function cleanupPathReferences(repoId: number, path: string): void {
     .run(repoId, path, path)
   db.prepare("DELETE FROM file_locks WHERE repo_id = ? AND (file_path = ? OR file_path LIKE ? || '/%')")
     .run(repoId, path, path)
+}
+
+/** 일괄 이동 (같은 저장소 내) — move()가 내부에서 개별 커밋 */
+export async function bulkMove(
+  repoId: number,
+  srcPaths: string[],
+  destFolder: string,
+  commitMessage: string
+): Promise<{ moved: number }> {
+  const repo = getRepoById(repoId)
+  let moved = 0
+
+  for (const srcPath of srcPaths) {
+    checkProtectionLock(repoId, srcPath)
+    const fileName = basename(srcPath)
+    const destPath = destFolder ? `${destFolder}/${fileName}` : fileName
+    const msg = moved === 0 ? commitMessage : `${commitMessage} (${moved + 1}/${srcPaths.length})`
+
+    await SvnService.move(repo.wcPath, srcPath, destPath, msg)
+    updatePathReferences(repoId, srcPath, destPath)
+    moved++
+  }
+
+  logActivity(repoId, 'file.move', destFolder, undefined, `${moved}개 파일 이동`)
+  return { moved }
+}
+
+/** 저장소 간 파일 이동 (복사 → svn add → 커밋 → 원본 삭제) */
+export async function crossRepoMove(
+  srcRepoId: number,
+  destRepoId: number,
+  srcPaths: string[],
+  destFolder: string,
+  commitMessage: string
+): Promise<{ moved: number }> {
+  const srcRepo = getRepoById(srcRepoId)
+  const destRepo = getRepoById(destRepoId)
+  let moved = 0
+
+  // 대상 저장소 최신화
+  await SvnService.update(destRepo.wcPath)
+
+  const addedRelPaths: string[] = []
+
+  for (const srcPath of srcPaths) {
+    checkProtectionLock(srcRepoId, srcPath)
+    const fileName = basename(srcPath)
+    const srcAbsPath = join(srcRepo.wcPath, srcPath)
+    const destRelPath = destFolder ? `${destFolder}/${fileName}` : fileName
+    const destAbsPath = join(destRepo.wcPath, destRelPath)
+
+    // 대상 경로의 부모 디렉토리 확인
+    const destDir = join(destRepo.wcPath, destFolder || '')
+    if (!existsSync(destDir)) {
+      mkdirSync(destDir, { recursive: true })
+    }
+
+    // 파일/폴더 복사 (작업복사본 → 작업복사본)
+    const stat = statSync(srcAbsPath)
+    if (stat.isDirectory()) {
+      copyDirRecursive(srcAbsPath, destAbsPath)
+    } else {
+      copyFileSync(srcAbsPath, destAbsPath)
+    }
+
+    // svn add — 상대 경로 사용 (cwd가 wcPath이므로)
+    addedRelPaths.push(destRelPath)
+    moved++
+  }
+
+  // svn add (상대 경로)
+  await SvnService.add(destRepo.wcPath, addedRelPaths)
+
+  // 대상 저장소 커밋 (절대 경로)
+  const addedAbsPaths = addedRelPaths.map(p => join(destRepo.wcPath, p))
+  await SvnService.commit(destRepo.wcPath, commitMessage, addedAbsPaths)
+  logActivity(destRepoId, 'file.upload', destFolder, undefined, `${moved}개 파일 (${srcRepo.name}에서 이동)`)
+
+  // 원본 저장소에서 삭제 — remove()가 내부에서 개별 커밋
+  for (const srcPath of srcPaths) {
+    const deleteMsg = `${destRepo.name}으로 이동됨`
+    await SvnService.remove(srcRepo.wcPath, srcPath, deleteMsg)
+    cleanupPathReferences(srcRepoId, srcPath)
+  }
+  logActivity(srcRepoId, 'file.move', undefined, undefined, `${moved}개 파일 → ${destRepo.name}`)
+
+  return { moved }
+}
+
+/** 디렉토리 재귀 복사 */
+function copyDirRecursive(src: string, dest: string): void {
+  mkdirSync(dest, { recursive: true })
+  for (const entry of readdirSync(src, { withFileTypes: true })) {
+    if (entry.name === '.svn') continue
+    const srcChild = join(src, entry.name)
+    const destChild = join(dest, entry.name)
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcChild, destChild)
+    } else {
+      copyFileSync(srcChild, destChild)
+    }
+  }
 }

@@ -285,6 +285,8 @@ export interface IpcChannelMap {
   'file:restore-version': { req: { repoId: number; path: string; targetRevision: number; commitMessage: string }; res: { revision: number } }
   'file:restore-deleted': { req: { repoId: number; trashItemId: number; commitMessage: string }; res: { revision: number } }
   'file:upload-version': { req: { repoId: number; filePath: string; srcPath: string; commitMessage: string }; res: { revision: number } }
+  'file:bulk-move': { req: { repoId: number; srcPaths: string[]; destFolder: string; commitMessage: string }; res: { moved: number } }
+  'file:cross-repo-move': { req: { srcRepoId: number; destRepoId: number; srcPaths: string[]; destFolder: string; commitMessage: string }; res: { moved: number } }
 
   // 커밋
   'commit:log': { req: CommitLogRequest; res: CommitLogEntry[] }
@@ -313,6 +315,9 @@ export interface IpcChannelMap {
   'bookmark:list': { req: void; res: Array<{ id: number; repoId: number; filePath: string; alias: string | null; displayOrder: number; createdAt: string }> }
   'bookmark:toggle': { req: { repoId: number; filePath: string }; res: { added: boolean } }
   'bookmark:check': { req: { repoId: number; filePath: string }; res: boolean }
+
+  // 활동 로그
+  'activity:list': { req: { repoId?: number; action?: string; limit?: number; offset?: number }; res: Array<{ id: number; repoId: number | null; repoName: string | null; action: string; filePath: string | null; revision: number | null; username: string | null; detail: string | null; createdAt: string }> }
 
   // 휴지통
   'trash:list': { req: { repoId?: number }; res: Array<{ id: number; repoId: number; repoName: string; filePath: string; deletedRevision: number; originalSize: number; deletedAt: string; expiresAt: string | null }> }
@@ -393,4 +398,10 @@ export interface IpcChannelMap {
   'svn-lock:lock': { req: { repoId: number; repoType: 'local' | 'remote'; path: string; comment?: string }; res: void }
   'svn-lock:unlock': { req: { repoId: number; repoType: 'local' | 'remote'; path: string }; res: void }
   'svn-lock:list': { req: { repoId: number; repoType: 'local' | 'remote' }; res: SvnLockEntry[] }
+
+  // 서버 연동 (Phase C)
+  'server:connect': { req: { url: string; username: string; password: string }; res: { connected: boolean; mode: string; user: { userId: number; username: string; role: string } | null } }
+  'server:disconnect': { req: void; res: { mode: string } }
+  'server:status': { req: void; res: { mode: string; connected: boolean; serverUrl: string; user: { userId: number; username: string; role: string } | null } }
+  'server:isConnected': { req: void; res: boolean }
 }

@@ -56,7 +56,7 @@ export function CommitModal({ files, defaultMessage = '', currentRevision, onCom
         <div className="p-5">
           {/* File list */}
           <div className="text-[11px] font-semibold text-gray-400 mb-2">변경 파일</div>
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-4">
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-4 max-h-[240px] overflow-y-auto">
             {files.map((f, i) => (
               <div key={f.name} className={`flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 ${i < files.length - 1 ? 'border-b border-gray-200 dark:border-gray-700' : ''}`}>
                 <input type="checkbox" checked={checkedFiles.has(f.name)} onChange={() => toggleFile(f.name)} className="accent-navy" />
