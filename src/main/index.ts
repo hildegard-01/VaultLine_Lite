@@ -5,6 +5,8 @@ import { initDatabase, closeDatabase } from './services/DatabaseService'
 import { registerIpcHandlers } from './ipc'
 import { hasPendingChanges, closeAll as closeWatcher } from './services/FileWatcherService'
 import { stopAll as stopAllSvnServe } from './services/SvnServeService'
+import { modeManager } from './services/server/ModeManager'
+import { PresenceService } from './services/server/PresenceService'
 
 /**
  * Electron Main Process 진입점
@@ -84,11 +86,27 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // DB 초기화 (19개 테이블 + FTS5)
+  // DB 초기화 (19개 테이블 + FTS5 + server_sync_queue)
   initDatabase()
 
   // IPC 핸들러 등록
   registerIpcHandlers()
+
+  // 서버 모드 초기화 (config.json server 블록 로드)
+  try {
+    const { readFileSync, existsSync } = require('fs') as typeof import('fs')
+    const configPath = app.isPackaged
+      ? require('path').join(process.resourcesPath, 'config.json')
+      : require('path').join(app.getAppPath(), 'config.json')
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+      if (config?.server) {
+        modeManager.initialize(config.server).catch(() => {})
+      }
+    }
+  } catch {
+    // config.json 없음 → 오프라인 모드 유지
+  }
 
   // 메인 윈도우 생성
   createWindow()
@@ -134,8 +152,10 @@ app.on('before-quit', async (event) => {
   }
 })
 
-// 앱 종료 시 watcher + svnserve + DB 정리
+// 앱 종료 시 watcher + svnserve + DB + 서버 서비스 정리
 app.on('will-quit', async () => {
+  PresenceService.stop()
+  await modeManager.cleanup()
   stopAllSvnServe()
   await closeWatcher()
   closeDatabase()

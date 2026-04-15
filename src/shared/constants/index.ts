@@ -53,6 +53,14 @@ export const BACKUP_MAX_COUNT = 7
 // 검색
 export const SEARCH_MAX_RESULTS = 100
 
+// 서버 연동 (Phase C)
+export const SERVER_CONNECT_TIMEOUT_MS = 3_000   // 연결 시도 타임아웃
+export const SERVER_REQUEST_TIMEOUT_MS = 5_000   // 일반 API 요청 타임아웃
+export const SERVER_HEARTBEAT_INTERVAL_MS = 60_000 // heartbeat 주기 (60초)
+export const SERVER_RETRY_INTERVAL_MS = 30_000   // 재연결 시도 주기
+export const SERVER_WS_TIMEOUT_MS = 30_000       // 파일 프록시 WebSocket 응답 타임아웃
+export const SERVER_PREVIEW_CACHE_MAX_GB = 5     // 서버 미리보기 캐시 최대 크기
+
 // UI 컬러
 export const COLORS = {
   navy: '#1B2A4A',
