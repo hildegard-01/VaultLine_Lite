@@ -1,4 +1,8 @@
 import { APP_NAME } from '@shared/constants'
+import { useMode } from '@renderer/hooks/useMode'
+import { ConnectionIndicator } from '@renderer/components/connected/ConnectionIndicator'
+import { NotificationBell } from '@renderer/components/connected/NotificationBell'
+import { UserAvatar } from '@renderer/components/connected/UserAvatar'
 
 interface HeaderProps {
   onOpenSettings?: () => void
@@ -9,6 +13,8 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenSettings, onOpenSearch, repoName, currentPath, onNavigate }: HeaderProps): React.JSX.Element {
+  const { connected, user, serverUrl, refresh } = useMode()
+
   // 브레드크럼 세그먼트 구성
   const segments: Array<{ label: string; path: string }> = []
   if (repoName) {
@@ -59,6 +65,13 @@ export function Header({ onOpenSettings, onOpenSearch, repoName, currentPath, on
       </div>
 
       <div className="flex-1" />
+
+      {/* 커넥티드 전용: 알림벨 + 사용자 아바타 */}
+      {connected && <NotificationBell />}
+      {connected && user && <UserAvatar user={user} onDisconnected={refresh} />}
+
+      {/* 연결 상태 표시 */}
+      <ConnectionIndicator connected={connected} serverUrl={serverUrl} />
 
       {/* Search */}
       <button

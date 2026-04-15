@@ -65,6 +65,9 @@ export function registerIpcHandlers(): void {
   // 동기화 + SVN 잠금 (Phase 11)
   registerSyncHandlers()
 
+  // 서버 연동 (Phase C)
+  registerServerHandlers()
+
   // 다이얼로그 — Electron 네이티브 파일 선택
   handleIpc('dialog:open-file', async () => {
     const { dialog, BrowserWindow } = require('electron')
@@ -111,3 +114,4 @@ import { registerSettingsHandlers } from './settings.ipc'
 import { registerSvnServeHandlers } from './svnserve.ipc'
 import { registerInvitationHandlers } from './invitation.ipc'
 import { registerSyncHandlers } from './sync.ipc'
+import { registerServerHandlers } from './server.ipc'

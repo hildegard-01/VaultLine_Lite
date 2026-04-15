@@ -1,6 +1,6 @@
 # VaultLine Lite — 개발 로드맵
 
-> 최종 수정: 2026-04-08
+> 최종 수정: 2026-04-15
 
 ---
 
@@ -36,43 +36,46 @@
 
 ### 신규 파일 (server/ 폴더)
 
-- [ ] C-1. `src/main/services/server/ModeManager.ts` — 오프라인/커넥티드 전환 핵심
-- [ ] C-2. `src/main/services/server/ServerConnectionService.ts` — JWT 로그인/토큰
-- [ ] C-3. `src/main/services/server/PresenceService.ts` — heartbeat (60초)
-- [ ] C-4. `src/main/services/server/RepoSyncService.ts` — 커밋 메타 push
-- [ ] C-5. `src/main/services/server/MetadataSyncService.ts` — 태그/활동 sync
-- [ ] C-6. `src/main/services/server/FileProxyService.ts` — 파일 프록시 (WebSocket)
-- [ ] C-7. `src/main/services/server/ServerShareService.ts` — 서버 공유 링크
-- [ ] C-8. `src/main/services/server/ServerInviteService.ts` — 초대 링크
-- [ ] C-9. `src/main/services/server/ServerNotificationService.ts` — 알림 수신
-- [ ] C-10. `src/main/services/server/ServerApprovalProxy.ts` — 승인 API 프록시
-- [ ] C-11. `src/main/services/server/ServerAdminProxy.ts` — 관리자 API 프록시
-- [ ] C-12. `src/main/ipc/server.ipc.ts` — 서버 관련 IPC 채널 4개
+- [x] C-1. `src/main/services/server/ModeManager.ts` — 오프라인/커넥티드 전환 핵심
+- [x] C-2. `src/main/services/server/ServerConnectionService.ts` — JWT 로그인/토큰
+- [x] C-3. `src/main/services/server/PresenceService.ts` — heartbeat (60초)
+- [x] C-4. `src/main/services/server/RepoSyncService.ts` — 커밋 메타 push
+- [x] C-5. `src/main/services/server/MetadataSyncService.ts` — 태그/활동 sync
+- [x] C-6. `src/main/services/server/FileProxyService.ts` — 파일 프록시 (WebSocket)
+- [x] C-7. `src/main/services/server/ServerShareService.ts` — 서버 공유 링크
+- [x] C-8. `src/main/services/server/ServerInviteService.ts` — 초대 링크
+- [x] C-9. `src/main/services/server/ServerNotificationService.ts` — 알림 수신
+- [x] C-10. `src/main/services/server/ServerApprovalProxy.ts` — 승인 API 프록시
+- [x] C-11. `src/main/services/server/ServerAdminProxy.ts` — 관리자 API 프록시
+- [x] C-12. `src/main/ipc/server.ipc.ts` — 서버 관련 IPC 채널 4개
 
 ### 기존 파일 수정 (최소)
 
-- [ ] C-13. `src/main/services/CommitService.ts` — sync hook 1줄
-- [ ] C-14. `src/main/services/TagService.ts` — sync hook 1줄
-- [ ] C-15. `src/main/services/LockService.ts` — sync hook 1줄
+- [x] C-13. `src/main/services/CommitService.ts` — sync hook 1줄
+- [x] C-14. `src/main/services/TagService.ts` — sync hook 1줄
+- [x] C-15. `src/main/services/LockService.ts` — sync hook 1줄
 
 ### UI (커넥티드 전용)
 
-- [ ] C-16. `src/renderer/src/hooks/useMode.ts` — 오프라인/커넥티드 모드 훅
-- [ ] C-17. `src/renderer/src/components/connected/` — 커넥티드 전용 컴포넌트 (알림벨, 사용자 아바타 등)
-- [ ] C-18. `src/renderer/src/components/layout/Header.tsx` — 조건부 알림벨/아바타 추가
-- [ ] C-19. `src/renderer/src/components/layout/Sidebar.tsx` — 조건부 공유받은문서/관리 메뉴
-- [ ] C-20. `SettingsModal.tsx` 서버 연결 탭 — 실제 연결 기능 활성화
+- [x] C-16. `src/renderer/src/hooks/useMode.ts` — 오프라인/커넥티드 모드 훅
+- [x] C-17. `src/renderer/src/components/connected/` — 커넥티드 전용 컴포넌트 (알림벨, 사용자 아바타 등)
+- [x] C-18. `src/renderer/src/components/layout/Header.tsx` — 조건부 알림벨/아바타 추가
+- [x] C-19. `src/renderer/src/components/layout/Sidebar.tsx` — 조건부 공유받은문서/관리 메뉴
+- [x] C-20. `SettingsModal.tsx` 서버 연결 탭 — 실제 연결 기능 활성화
 
 ---
 
 ## Phase D — 통합 테스트 + 마무리 (2주)
 
-- [ ] D-1. 오프라인 ↔ 커넥티드 전환 안정성 테스트
-- [ ] D-2. 웹 포탈 연동 테스트 (커밋 → 서버 이력 확인)
-- [ ] D-3. eager preview cache 테스트
-- [ ] D-4. 관리자 화면 통합 테스트
-- [ ] D-5. E2E 테스트 전체 통과
-- [ ] D-6. NSIS 인스톨러 최종 빌드 + 배포
+> 테스트 케이스: [docs/TEST_CASES.md](./docs/TEST_CASES.md)
+> 진행 기록: [docs/E2E_TEST_PROGRESS.md](./docs/E2E_TEST_PROGRESS.md)
+
+- [ ] D-1. 오프라인 ↔ 커넥티드 전환 안정성 테스트 (TC-01)
+- [ ] D-2. 서버 동기화 테스트 — 커밋/태그/잠금 메타 push (TC-02)
+- [ ] D-3. 파일 프록시 + WebSocket 테스트 (TC-03)
+- [ ] D-4. 커넥티드 UI 통합 테스트 — 알림벨/아바타/사이드바 (TC-04)
+- [ ] D-5. 기존 로컬 기능 회귀 테스트 (TC-05) + E2E 전체 통과
+- [ ] D-6. NSIS 인스톨러 최종 빌드 + 배포 (TC-06)
 
 ---
 

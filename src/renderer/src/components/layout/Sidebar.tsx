@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@renderer/services/ipcClient'
 import { FileIcon } from '@renderer/components/shared/FileIcon'
 import { CreateRepoModal } from '@renderer/components/modals/CreateRepoModal'
+import { useMode } from '@renderer/hooks/useMode'
+import { SharedWithMe } from '@renderer/components/connected/SharedWithMe'
 import type { Repository, Tag } from '@shared/types/ipc'
 
 interface SidebarProps {
@@ -15,6 +17,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
   const { repoId } = useParams<{ repoId: string }>()
   const location = useLocation()
   const queryClient = useQueryClient()
+  const { connected, isAdmin } = useMode()
   const [showCreateRepo, setShowCreateRepo] = useState(false)
   const [showTagInput, setShowTagInput] = useState(false)
   const [newTagName, setNewTagName] = useState('')
@@ -233,6 +236,29 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
         )}
         <TagList tags={tags} queryClient={queryClient} />
       </section>
+
+      {/* 커넥티드 전용: 공유받은 문서 */}
+      {connected && (
+        <>
+          <hr className="border-gray-200 dark:border-gray-700 mx-3" />
+          <SharedWithMe />
+        </>
+      )}
+
+      {/* 커넥티드 전용: 관리자 메뉴 */}
+      {connected && isAdmin && (
+        <section className="px-3 pb-2">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('vaultline:open-admin'))}
+            className="flex items-center gap-2 px-2 py-1 rounded text-xs text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 w-full"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+            </svg>
+            <span>관리자</span>
+          </button>
+        </section>
+      )}
 
       {/* 휴지통 */}
       <TrashButton active={location.pathname === '/trash'} onClick={() => navigate('/trash')} />

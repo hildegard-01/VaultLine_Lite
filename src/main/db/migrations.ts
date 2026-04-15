@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { SCHEMA_VERSION } from './schema'
+import { SCHEMA_VERSION, CREATE_SERVER_SYNC_QUEUE_SQL } from './schema'
 
 /**
  * DB 마이그레이션 관리
@@ -12,10 +12,10 @@ type MigrationFn = (db: Database.Database) => void
 // 버전별 마이그레이션 정의 (버전 1→2, 2→3, ...)
 // 현재는 초기 버전이므로 비어 있음. 스키마 변경 시 여기에 추가.
 const migrations: Record<number, MigrationFn> = {
-  // 예시: 버전 1 → 2 마이그레이션
-  // 2: (db) => {
-  //   db.exec('ALTER TABLE repositories ADD COLUMN sharing_enabled BOOLEAN DEFAULT 0')
-  // }
+  // 버전 1 → 2: 서버 동기화 큐 테이블 추가 (Phase C)
+  2: (db) => {
+    db.exec(CREATE_SERVER_SYNC_QUEUE_SQL)
+  }
 }
 
 /** 현재 DB의 스키마 버전을 조회 */

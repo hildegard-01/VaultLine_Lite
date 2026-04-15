@@ -4,7 +4,7 @@
  */
 
 // 현재 스키마 버전 (마이그레이션 제어용)
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 // 테이블 생성 SQL (실행 순서 = 외래 키 의존 순서)
 export const CREATE_TABLES_SQL = `
@@ -209,6 +209,20 @@ CREATE TABLE IF NOT EXISTS preview_cache (
     file_size  INTEGER DEFAULT 0,
     UNIQUE(repo_id, file_path, revision)
 );
+`
+
+// ═══ 서버 동기화 큐 (Phase C) ═══
+// 오프라인 상태에서 발생한 메타데이터를 보관 → 재연결 시 일괄 push
+export const CREATE_SERVER_SYNC_QUEUE_SQL = `
+CREATE TABLE IF NOT EXISTS server_sync_queue (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id     INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+    action      TEXT NOT NULL,
+    payload     TEXT NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    synced_at   DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_synced ON server_sync_queue(synced_at);
 `
 
 // FTS5 가상 테이블은 별도 (IF NOT EXISTS 미지원이므로 try-catch 필요)
