@@ -5,6 +5,27 @@ import { FileIcon } from '@renderer/components/shared/FileIcon'
 import { StatusDot } from '@renderer/components/shared/StatusDot'
 import type { FileEntry, CommitLogEntry, Tag } from '@shared/types/ipc'
 
+// 단순 diff 텍스트를 라인별로 색상 표시
+function DiffViewer({ diff }: { diff: string }) {
+  const lines = diff.split('\n')
+  return (
+    <div className="font-mono text-[10px] leading-relaxed overflow-x-auto">
+      {lines.map((line, i) => {
+        const cls = line.startsWith('+') && !line.startsWith('+++')
+          ? 'bg-green-50 text-green-700'
+          : line.startsWith('-') && !line.startsWith('---')
+          ? 'bg-red-50 text-red-600'
+          : line.startsWith('@@')
+          ? 'bg-blue-50 text-blue-600'
+          : 'text-gray-500'
+        return (
+          <div key={i} className={`px-1 whitespace-pre ${cls}`}>{line || ' '}</div>
+        )
+      })}
+    </div>
+  )
+}
+
 interface FileRightPanelProps {
   file: FileEntry | null
   repoId?: number
@@ -13,6 +34,7 @@ interface FileRightPanelProps {
   onLockToggle?: (file: FileEntry) => void
   onShare?: (file: FileEntry) => void
   onDelete?: (file: FileEntry) => void
+  onMove?: (file: FileEntry) => void
   onPreview?: (file: FileEntry) => void
   onRestoreVersion?: (file: FileEntry, revision: number) => void
   onClearSelection?: () => void
@@ -40,10 +62,31 @@ function formatDate(dateStr: string): string {
 
 export function FileRightPanel({
   file, repoId, recentCommits = [], repoStats,
-  onLockToggle, onShare, onDelete, onPreview, onRestoreVersion, onClearSelection, onTagsChanged
+  onLockToggle, onShare, onDelete, onMove, onPreview, onRestoreVersion, onClearSelection, onTagsChanged
 }: FileRightPanelProps) {
 
   const [showTagPicker, setShowTagPicker] = useState(false)
+  const [showAllCommits, setShowAllCommits] = useState(false)
+  const [expandedDiff, setExpandedDiff] = useState<number | null>(null)
+
+  // 전체 커밋 이력 (더보기 클릭 시)
+  const { data: allCommits = [] } = useQuery({
+    queryKey: ['commit:log:full', repoId, file?.path],
+    queryFn: () => invoke('commit:log', { repoId: repoId!, path: file!.path, limit: 200 }),
+    enabled: !!repoId && !!file && showAllCommits
+  })
+
+  // diff 조회
+  const { data: diffText, isFetching: diffLoading } = useQuery({
+    queryKey: ['commit:diff', repoId, file?.path, expandedDiff],
+    queryFn: () => invoke('commit:diff', {
+      repoId: repoId!,
+      path: file!.path,
+      rev1: expandedDiff! - 1,
+      rev2: expandedDiff!
+    }),
+    enabled: !!repoId && !!file && expandedDiff !== null
+  })
 
   // 파일에 붙은 태그 조회
   const { data: fileTags = [], refetch: refetchFileTags } = useQuery({
@@ -164,6 +207,12 @@ export function FileRightPanel({
           </button>
         )}
         <button
+          onClick={() => onMove?.(file)}
+          className="py-1.5 text-[11px] font-semibold border border-blue-200 text-blue-600 rounded-md bg-white dark:bg-gray-800 hover:bg-blue-50 transition"
+        >
+          이동
+        </button>
+        <button
           onClick={() => onDelete?.(file)}
           className="py-1.5 text-[11px] font-semibold border border-red-200 text-red-500 rounded-md bg-white dark:bg-gray-800 hover:bg-red-50 transition"
         >
@@ -230,31 +279,73 @@ export function FileRightPanel({
         )}
       </div>
 
-      {/* 최근 커밋 */}
-      <h3 className="text-[10px] font-semibold text-gray-400 mb-2">최근 커밋</h3>
-      {recentCommits.length > 0 ? (
-        recentCommits.slice(0, 5).map((c, i) => (
-          <div key={c.revision} className={`py-1.5 ${i < recentCommits.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-blue-600">r.{c.revision}</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-gray-400 text-[11px]">{formatDate(c.date)}</span>
-                {file.type !== 'dir' && (
-                  <button
-                    onClick={() => onRestoreVersion?.(file, c.revision)}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-orange-200 text-orange-500 hover:bg-orange-50"
-                  >
-                    복원
-                  </button>
+      {/* 파일 경로 */}
+      <div className="mb-4 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+        <div className="text-[10px] text-gray-400 mb-0.5">경로</div>
+        <div className="text-[11px] text-gray-600 dark:text-gray-300 break-all">{file.path || '/'}</div>
+        {file.type !== 'dir' && (
+          <div className="flex gap-3 mt-1.5 text-[10px] text-gray-400">
+            <span>크기 {formatSize(file.size)}</span>
+            <span>수정 {formatDate(file.date)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* 커밋 이력 */}
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-[10px] font-semibold text-gray-400">커밋 이력</h3>
+        {recentCommits.length >= 5 && (
+          <button
+            onClick={() => { setShowAllCommits(v => !v); setExpandedDiff(null) }}
+            className="text-[10px] text-blue-500 hover:text-blue-700"
+          >
+            {showAllCommits ? '접기' : '전체 보기'}
+          </button>
+        )}
+      </div>
+
+      {(() => {
+        const commits: CommitLogEntry[] = showAllCommits && allCommits.length > 0 ? allCommits : recentCommits
+        if (commits.length === 0) return <p className="text-xs text-gray-400">커밋 이력이 없습니다</p>
+        return commits.map((c, i) => (
+          <div key={c.revision} className={`${i < commits.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+            <div
+              className="py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded px-1 -mx-1 transition"
+              onClick={() => setExpandedDiff(expandedDiff === c.revision ? null : c.revision)}
+            >
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-blue-600">r.{c.revision}</span>
+                <div className="flex items-center gap-1.5">
+                  {c.author && <span className="text-gray-400 text-[10px]">{c.author}</span>}
+                  <span className="text-gray-400 text-[11px]">{formatDate(c.date)}</span>
+                  {file.type !== 'dir' && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onRestoreVersion?.(file, c.revision) }}
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-orange-200 text-orange-500 hover:bg-orange-50"
+                    >
+                      복원
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="text-[11px] text-gray-500 mt-0.5 truncate">{c.message}</div>
+            </div>
+
+            {/* 인라인 Diff */}
+            {expandedDiff === c.revision && (
+              <div className="mb-1.5 rounded border border-gray-200 dark:border-gray-600 overflow-hidden">
+                {diffLoading ? (
+                  <div className="text-[11px] text-gray-400 p-2">불러오는 중...</div>
+                ) : diffText ? (
+                  <DiffViewer diff={diffText as string} />
+                ) : (
+                  <div className="text-[11px] text-gray-400 p-2">변경 내용 없음</div>
                 )}
               </div>
-            </div>
-            <div className="text-[11px] text-gray-500 mt-0.5 truncate">{c.message}</div>
+            )}
           </div>
         ))
-      ) : (
-        <p className="text-xs text-gray-400">커밋 이력이 없습니다</p>
-      )}
+      })()}
     </aside>
   )
 }

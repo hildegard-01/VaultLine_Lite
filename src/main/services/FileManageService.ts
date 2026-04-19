@@ -88,6 +88,7 @@ export async function moveFile(
   commitMessage: string
 ): Promise<void> {
   const repo = getRepoById(repoId)
+  console.log(`[FileManage] 이동 요청: repoId=${repoId} src="${srcPath}" dest="${destPath}" wcPath="${repo.wcPath}"`)
   checkProtectionLock(repoId, srcPath)
 
   await SvnService.move(repo.wcPath, srcPath, destPath, commitMessage)

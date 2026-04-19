@@ -4,7 +4,7 @@
  */
 
 // 현재 스키마 버전 (마이그레이션 제어용)
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 // 테이블 생성 SQL (실행 순서 = 외래 키 의존 순서)
 export const CREATE_TABLES_SQL = `
@@ -183,11 +183,13 @@ CREATE TABLE IF NOT EXISTS svn_locks (
 
 -- ═══ 검색 ═══
 CREATE TABLE IF NOT EXISTS search_metadata (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo_id    INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    file_path  TEXT NOT NULL,
-    revision   INTEGER NOT NULL,
-    indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id        INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    file_path      TEXT NOT NULL,
+    revision       INTEGER NOT NULL,
+    file_name      TEXT DEFAULT '',
+    commit_message TEXT DEFAULT '',
+    indexed_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(repo_id, file_path)
 );
 

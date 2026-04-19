@@ -1,6 +1,16 @@
 import { app, shell, BrowserWindow, dialog, protocol, net } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import log from 'electron-log'
+
+// electron-log 초기화
+log.initialize()
+log.transports.file.level = 'debug'
+log.transports.console.level = 'debug'
+log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}] [{level}] {text}'
+console.log = log.log.bind(log)
+console.error = log.error.bind(log)
+console.warn = log.warn.bind(log)
 import { initDatabase, closeDatabase } from './services/DatabaseService'
 import { registerIpcHandlers } from './ipc'
 import { hasPendingChanges, closeAll as closeWatcher } from './services/FileWatcherService'

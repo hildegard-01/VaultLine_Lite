@@ -85,24 +85,21 @@ export async function uploadAndCommit(
     addedFiles.push(destPath)
   }
 
-  // svn add — 이미 관리 중인 파일은 에러 무시
+  // svn add — 이미 버전 관리 중인 파일 에러만 무시, 그 외 에러는 전파
   for (const f of addedFiles) {
     try {
       await SvnService.add(repo.wcPath, [f])
-    } catch { /* 이미 버전 관리 중 → 무시 */ }
+    } catch (e) {
+      const msg = (e as Error).message || ''
+      if (!msg.includes('already under version control') && !msg.includes('이미 버전 관리')) {
+        throw new Error(`파일 추가 실패 (${f}): ${msg}`)
+      }
+    }
   }
 
   // svn commit
-  const revision = await SvnService.commit(repo.wcPath, commitMessage, addedFiles)
+  const finalRevision = await SvnService.commit(repo.wcPath, commitMessage, addedFiles)
 
-  // revision 0이면 targets 없이 WC 전체 커밋 재시도
-  let finalRevision = revision
-  if (revision === 0) {
-    finalRevision = await SvnService.commit(repo.wcPath, commitMessage)
-  }
-
-  // revision 0 = 변경 없음 (파일 내용이 동일한 경우)
-  // 에러가 아닌 정상 케이스로 처리하되 사용자에게 안내
   if (finalRevision === 0) {
     throw new Error('파일 내용이 기존과 동일하여 새 버전이 생성되지 않았습니다.')
   }
@@ -220,9 +217,13 @@ function updateSearchIndex(
   const db = getDatabase()
 
   const upsertMeta = db.prepare(`
-    INSERT INTO search_metadata (repo_id, file_path, revision, indexed_at)
-    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(repo_id, file_path) DO UPDATE SET revision = excluded.revision, indexed_at = CURRENT_TIMESTAMP
+    INSERT INTO search_metadata (repo_id, file_path, revision, file_name, commit_message, indexed_at)
+    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(repo_id, file_path) DO UPDATE SET
+      revision = excluded.revision,
+      file_name = excluded.file_name,
+      commit_message = excluded.commit_message,
+      indexed_at = CURRENT_TIMESTAMP
   `)
 
   const upsertIndex = db.prepare(`
@@ -233,14 +234,14 @@ function updateSearchIndex(
   const update = db.transaction(() => {
     for (const fileName of fileNames) {
       const filePath = dirPath ? `${dirPath}/${fileName}` : fileName
-      upsertMeta.run(repoId, filePath, revision)
+      upsertMeta.run(repoId, filePath, revision, fileName, commitMessage)
 
       // FTS5에는 UPSERT가 없으므로 DELETE → INSERT
       try {
         db.prepare('DELETE FROM search_index WHERE repo_id = ? AND file_path = ?').run(repoId, filePath)
         upsertIndex.run(repoId, filePath, revision, fileName, commitMessage)
-      } catch {
-        // FTS5 오류 무시 (인덱싱 실패가 앱 전체를 멈추면 안 됨)
+      } catch (e) {
+        console.error('[Search] FTS5 인덱싱 실패:', filePath, e)
       }
     }
   })

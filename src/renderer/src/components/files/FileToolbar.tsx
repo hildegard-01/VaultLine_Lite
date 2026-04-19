@@ -9,12 +9,13 @@ interface FileToolbarProps {
   onBulkDelete?: () => void
   onBulkLock?: () => void
   onBulkShare?: () => void
+  onBulkMove?: () => void
   onClearChecked?: () => void
 }
 
 export function FileToolbar({
   itemCount, checkedCount, onUpload, onNewFolder, onLockRules,
-  onBulkDelete, onBulkLock, onBulkShare, onClearChecked
+  onBulkDelete, onBulkLock, onBulkShare, onBulkMove, onClearChecked
 }: FileToolbarProps) {
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
@@ -58,6 +59,12 @@ export function FileToolbar({
             <button onClick={onBulkShare}
               className="text-[11px] px-2.5 py-1 border border-green-200 text-green-600 rounded-md hover:bg-green-50">
               공유
+            </button>
+          )}
+          {onBulkMove && (
+            <button onClick={onBulkMove}
+              className="text-[11px] px-2.5 py-1 border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50">
+              이동
             </button>
           )}
         </>

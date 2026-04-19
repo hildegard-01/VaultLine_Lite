@@ -45,17 +45,23 @@ async function execSvn(
   const env = getSvnEnv()
   const timeout = options?.timeout || 30_000
 
+  console.log(`[SVN] 실행: ${command} ${args.join(' ')}`)
+
   try {
-    return await execFileAsync(svnPath, args, {
+    const result = await execFileAsync(svnPath, args, {
       env,
       cwd: options?.cwd,
       timeout,
-      maxBuffer: 50 * 1024 * 1024, // 50MB
+      maxBuffer: 50 * 1024 * 1024,
       windowsHide: true
     })
+    if (result.stdout) console.log(`[SVN] stdout: ${result.stdout.trim()}`)
+    if (result.stderr) console.warn(`[SVN] stderr: ${result.stderr.trim()}`)
+    return result
   } catch (err: unknown) {
     const error = err as { stderr?: string; message?: string }
     const msg = error.stderr || error.message || '알 수 없는 SVN 오류'
+    console.error(`[SVN] 오류: ${msg.trim()}`)
     throw new Error(`SVN 오류: ${msg.trim()}`)
   }
 }
@@ -210,9 +216,12 @@ export async function commit(
     } else {
       args.push(wcPath)
     }
-    const { stdout } = await execSvn('svn', args)
-    // "Committed revision N." 에서 리비전 번호 추출
-    const match = stdout.match(/Committed revision (\d+)/)
+    const { stdout, stderr } = await execSvn('svn', args)
+
+    // 로케일 무관 리비전 추출: 커밋 출력 마지막 줄의 숫자. 패턴
+    // 영문: "Committed revision 6."  한국어: "커밋된 리비전 6."
+    const lastLine = (stdout + '\n' + stderr).trimEnd().split('\n').pop()?.trim() ?? ''
+    const match = lastLine.match(/(\d+)\.$/)
     return match ? parseInt(match[1], 10) : 0
   })
 }
@@ -250,8 +259,13 @@ export async function move(
   destPath: string,
   message: string
 ): Promise<void> {
+  const normalizedSrc = srcPath.replace(/\\/g, '/')
+  const normalizedDest = destPath.replace(/\\/g, '/')
+  if (normalizedSrc === normalizedDest) {
+    throw new Error('원본과 대상 경로가 동일합니다.')
+  }
   await enqueue(wcPath, async () => {
-    await execSvn('svn', ['move', `${wcPath}/${srcPath}`, `${wcPath}/${destPath}`])
+    await execSvn('svn', ['move', '--force', `${wcPath}/${normalizedSrc}`, `${wcPath}/${normalizedDest}`])
     await execSvn('svn', ['commit', '-m', message, wcPath])
   })
 }

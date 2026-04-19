@@ -84,6 +84,18 @@ export function initDatabase(): Database.Database {
     runMigrations(_db)
   }
 
+  // FTS5 테이블 존재 여부 확인 후 없으면 생성 (기존 DB 안전망)
+  try {
+    _db.prepare('SELECT COUNT(*) FROM search_index').get()
+  } catch {
+    console.log('[DB] search_index 테이블 없음 → FTS5 생성')
+    try {
+      _db.exec(CREATE_FTS5_SQL)
+    } catch (e) {
+      console.error('[DB] FTS5 생성 실패:', e)
+    }
+  }
+
   return _db
 }
 

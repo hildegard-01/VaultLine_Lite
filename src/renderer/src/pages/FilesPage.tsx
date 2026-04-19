@@ -12,6 +12,7 @@ import { InputModal } from '@renderer/components/modals/InputModal'
 import { ShareModal } from '@renderer/components/modals/ShareModal'
 import { PreviewModal } from '@renderer/components/modals/PreviewModal'
 import { LockRulesModal } from '@renderer/components/modals/LockRulesModal'
+import { MoveFolderModal } from '@renderer/components/modals/MoveFolderModal'
 import type { FileEntry, PendingChange } from '@shared/types/ipc'
 
 export function FilesPage(): React.JSX.Element {
@@ -102,6 +103,8 @@ export function FilesPage(): React.JSX.Element {
   const [shareFile, setShareFile] = useState<FileEntry | null>(null)
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null)
   const [showLockRules, setShowLockRules] = useState(false)
+  const [moveTarget, setMoveTarget] = useState<FileEntry | null>(null)
+  const [moveBulkPaths, setMoveBulkPaths] = useState<string[]>([])
 
   // Pending Changes (Phase 9) — watcher 이벤트 + svn status 복합
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([])
@@ -448,6 +451,49 @@ export function FilesPage(): React.JSX.Element {
     }
   }, [checkedPaths, numRepoId, queryClient])
 
+  // 단일 파일 이동
+  const handleMove = useCallback((file: FileEntry) => {
+    setMoveTarget(file)
+    setMoveBulkPaths([])
+  }, [])
+
+  // 일괄 이동
+  const handleBulkMove = useCallback(() => {
+    const paths = Array.from(checkedPaths)
+    if (paths.length === 0) return
+    setMoveBulkPaths(paths)
+    setMoveTarget(null)
+  }, [checkedPaths])
+
+  // 이동 실행
+  const handleMoveConfirm = useCallback(async (destFolder: string) => {
+    const targets = moveTarget ? [moveTarget.path] : moveBulkPaths
+    try {
+      for (const srcPath of targets) {
+        const normalized = srcPath.replace(/\\/g, '/')
+        const fileName = normalized.split('/').pop() ?? normalized
+        const destPath = destFolder ? `${destFolder}/${fileName}` : fileName
+        if (normalized === destPath) {
+          alert(`"${fileName}"은(는) 이미 해당 위치에 있습니다.`)
+          continue
+        }
+        await invoke('file:move', {
+          repoId: numRepoId,
+          srcPath: normalized,
+          destPath,
+          commitMessage: `이동: ${normalized} → ${destPath}`
+        })
+      }
+      setMoveTarget(null)
+      setMoveBulkPaths([])
+      setCheckedPaths(new Set())
+      setSelectedFile(null)
+      queryClient.invalidateQueries({ queryKey: ['file:list', numRepoId] })
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '이동 실패')
+    }
+  }, [moveTarget, moveBulkPaths, numRepoId, queryClient])
+
   // ─── Pending Changes 커밋/폐기 ───
 
   const handlePendingCommitAll = useCallback(() => {
@@ -574,6 +620,7 @@ export function FilesPage(): React.JSX.Element {
           onBulkDelete={handleBulkDelete}
           onBulkLock={handleBulkLock}
           onBulkShare={handleBulkShare}
+          onBulkMove={handleBulkMove}
           onClearChecked={() => setCheckedPaths(new Set())}
         />
         <PendingChangesBar
@@ -621,6 +668,7 @@ export function FilesPage(): React.JSX.Element {
           onLockToggle={handleLockToggle}
           onShare={setShareFile}
           onDelete={handleDelete}
+          onMove={handleMove}
           onPreview={setPreviewFile}
           onRestoreVersion={handleRestoreVersion}
           onClearSelection={() => setSelectedFile(null)}
@@ -656,6 +704,19 @@ export function FilesPage(): React.JSX.Element {
 
       {showLockRules && (
         <LockRulesModal onClose={() => setShowLockRules(false)} />
+      )}
+
+      {(moveTarget || moveBulkPaths.length > 0) && (
+        <MoveFolderModal
+          repoId={numRepoId}
+          targetNames={
+            moveTarget
+              ? [moveTarget.name]
+              : moveBulkPaths.map(p => p.split('/').pop() ?? p)
+          }
+          onConfirm={handleMoveConfirm}
+          onClose={() => { setMoveTarget(null); setMoveBulkPaths([]) }}
+        />
       )}
 
       {showPendingCommitModal && (
