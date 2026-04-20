@@ -7,13 +7,15 @@
 interface ConnectionIndicatorProps {
   connected: boolean
   serverUrl: string | null
+  onClick?: () => void
 }
 
-export function ConnectionIndicator({ connected, serverUrl }: ConnectionIndicatorProps): React.JSX.Element {
+export function ConnectionIndicator({ connected, serverUrl, onClick }: ConnectionIndicatorProps): React.JSX.Element {
   return (
-    <div
-      className="flex items-center gap-1.5 px-2 py-1 rounded-md"
-      title={connected ? `서버 연결됨: ${serverUrl}` : '오프라인 모드'}
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition ${onClick ? 'hover:bg-white/[0.12] cursor-pointer' : 'cursor-default'}`}
+      title={connected ? `서버 연결됨: ${serverUrl}` : '클릭하여 서버 연결'}
     >
       <span
         className={`w-2 h-2 rounded-full shrink-0 ${
@@ -23,6 +25,6 @@ export function ConnectionIndicator({ connected, serverUrl }: ConnectionIndicato
       <span className="text-[10px] text-white/60 hidden xl:inline">
         {connected ? '연결됨' : '오프라인'}
       </span>
-    </div>
+    </button>
   )
 }

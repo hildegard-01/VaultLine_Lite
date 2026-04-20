@@ -20,6 +20,7 @@ import { SERVER_CONNECT_TIMEOUT_MS, SERVER_REQUEST_TIMEOUT_MS } from '@shared/co
 
 // 메모리에만 보관 — 디스크 저장 금지
 let _accessToken: string | null = null
+let _refreshToken: string | null = null
 let _axiosInstance: AxiosInstance | null = null
 
 /** axios 인스턴스 생성 또는 반환 */
@@ -88,19 +89,24 @@ export async function login(
       withCredentials: true
     })
 
-    const response = await connectInstance.post<{ access_token: string; user: ModeManager.ConnectedUser }>(
-      '/auth/login',
-      { username, password }
-    )
+    const response = await connectInstance.post<{
+      access_token: string
+      refresh_token: string
+      user_id: number
+      username: string
+      display_name: string | null
+      role: string
+    }>('/auth/login', { username, password })
 
-    const { access_token, user } = response.data
+    const { access_token, refresh_token, user_id, username: uname, role } = response.data
 
-    // 액세스 토큰 메모리 보관 (디스크 저장 금지)
+    // 토큰 메모리 보관 (디스크 저장 금지)
     _accessToken = access_token
+    _refreshToken = refresh_token
     _axiosInstance = null // 인스턴스 재생성 강제 (새 URL 적용)
 
     // 커넥티드 모드 전환
-    ModeManager.setConnected(user, serverUrl)
+    ModeManager.setConnected({ id: user_id, username: uname, role }, serverUrl)
 
     return { success: true }
   } catch (error) {
@@ -122,6 +128,7 @@ export async function logout(): Promise<void> {
     // 로그아웃 실패해도 로컬 상태는 초기화
   } finally {
     _accessToken = null
+    _refreshToken = null
     _axiosInstance = null
     ModeManager.setOffline()
   }
@@ -151,10 +158,15 @@ export async function autoConnect(serverUrl: string): Promise<boolean> {
  * Refresh Token은 HttpOnly 쿠키로 자동 전송
  */
 async function _tryRefreshToken(): Promise<boolean> {
+  if (!_refreshToken) return false
   try {
     const instance = getAxiosInstance()
-    const response = await instance.post<{ access_token: string }>('/auth/refresh')
+    const response = await instance.post<{ access_token: string; refresh_token: string }>(
+      '/auth/refresh',
+      { refresh_token: _refreshToken }
+    )
     _accessToken = response.data.access_token
+    _refreshToken = response.data.refresh_token
     return true
   } catch {
     return false
@@ -182,8 +194,8 @@ export async function checkHealth(): Promise<boolean> {
 /** 오류 메시지 파싱 헬퍼 */
 function _parseError(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { detail?: string; message?: string } | undefined
-    if (data?.detail) return data.detail
+    const data = error.response?.data as { detail?: unknown; message?: string } | undefined
+    if (typeof data?.detail === 'string' && data.detail) return data.detail
     if (data?.message) return data.message
     if (error.code === 'ECONNREFUSED') return '서버에 연결할 수 없습니다. 서버 주소를 확인하세요.'
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') return '서버 응답이 없습니다. (타임아웃)'

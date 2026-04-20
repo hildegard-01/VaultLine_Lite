@@ -13,12 +13,13 @@ import type { AppSettings, BackupEntry } from '@shared/types/ipc'
 
 interface SettingsModalProps {
   onClose: () => void
+  initialTab?: Tab
 }
 
 type Tab = 'general' | 'backup' | 'server'
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
-  const [tab, setTab] = useState<Tab>('general')
+export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModalProps) {
+  const [tab, setTab] = useState<Tab>(initialTab)
 
   return (
     <div

@@ -5,6 +5,7 @@ import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { SettingsModal } from '@renderer/components/modals/SettingsModal'
 import { SearchModal } from '@renderer/components/modals/SearchModal'
+import { AdminModal } from '@renderer/components/modals/AdminModal'
 import { useWindowSize } from '@renderer/hooks/useWindowSize'
 import { invoke } from '@renderer/services/ipcClient'
 
@@ -14,7 +15,9 @@ export function Shell(): React.JSX.Element {
   const navigate = useNavigate()
   const [sidebarHover, setSidebarHover] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'backup' | 'server'>('general')
   const [showSearch, setShowSearch] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
 
   // 현재 경로 (FilesPage에서 커스텀 이벤트로 동기화)
   const [currentPath, setCurrentPath] = useState('')
@@ -41,6 +44,13 @@ export function Shell(): React.JSX.Element {
     setCurrentPath('')
   }, [repoId])
 
+  // 관리자 모달 열기 이벤트
+  useEffect(() => {
+    const handler = () => setShowAdmin(true)
+    window.addEventListener('vaultline:open-admin', handler)
+    return () => window.removeEventListener('vaultline:open-admin', handler)
+  }, [])
+
   // 브레드크럼 클릭 → FilesPage에 경로 변경 요청
   const handleBreadcrumbNavigate = useCallback((path: string) => {
     window.dispatchEvent(new CustomEvent('vaultline:navigate-to', { detail: { path, selectFile: null } }))
@@ -51,7 +61,8 @@ export function Shell(): React.JSX.Element {
   return (
     <div className="flex flex-col h-screen">
       <Header
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={() => { setSettingsInitialTab('general'); setShowSettings(true) }}
+        onOpenServerSettings={() => { setSettingsInitialTab('server'); setShowSettings(true) }}
         onOpenSearch={() => setShowSearch(true)}
         repoName={currentRepo?.name}
         currentPath={currentPath}
@@ -71,7 +82,8 @@ export function Shell(): React.JSX.Element {
         </main>
       </div>
 
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showAdmin && <AdminModal onClose={() => setShowAdmin(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} initialTab={settingsInitialTab} />}
       {showSearch && <SearchModal onClose={() => setShowSearch(false)} onSelect={(result) => {
         setShowSearch(false)
         // 검색 결과의 파일 위치로 이동

@@ -6,13 +6,14 @@ import { UserAvatar } from '@renderer/components/connected/UserAvatar'
 
 interface HeaderProps {
   onOpenSettings?: () => void
+  onOpenServerSettings?: () => void
   onOpenSearch?: () => void
   repoName?: string
   currentPath?: string
   onNavigate?: (path: string) => void
 }
 
-export function Header({ onOpenSettings, onOpenSearch, repoName, currentPath, onNavigate }: HeaderProps): React.JSX.Element {
+export function Header({ onOpenSettings, onOpenServerSettings, onOpenSearch, repoName, currentPath, onNavigate }: HeaderProps): React.JSX.Element {
   const { connected, user, serverUrl, refresh } = useMode()
 
   // 브레드크럼 세그먼트 구성
@@ -71,7 +72,7 @@ export function Header({ onOpenSettings, onOpenSearch, repoName, currentPath, on
       {connected && user && <UserAvatar user={user} onDisconnected={refresh} />}
 
       {/* 연결 상태 표시 */}
-      <ConnectionIndicator connected={connected} serverUrl={serverUrl} />
+      <ConnectionIndicator connected={connected} serverUrl={serverUrl} onClick={onOpenServerSettings} />
 
       {/* Search */}
       <button

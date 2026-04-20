@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { invoke } from '@renderer/services/ipcClient'
+import { useMode } from '@renderer/hooks/useMode'
 
 /**
  * SharedWithMe — 사이드바 "공유받은 문서" 섹션
@@ -19,13 +20,16 @@ interface ServerRepo {
 }
 
 export function SharedWithMe(): React.JSX.Element {
+  const { user } = useMode()
   const { data, isLoading } = useQuery({
     queryKey: ['server:repo:list'],
-    queryFn: () => invoke('server:repo:list' as any, { skip: 0, limit: 20 }),
+    queryFn: () => invoke('server:repo:list' as any, { skip: 0, limit: 50 }),
     refetchInterval: 30_000
   })
 
-  const repos = (data as { items: ServerRepo[] } | undefined)?.items ?? []
+  // 내가 소유하지 않은 저장소만 표시 (공유받은 문서)
+  const allRepos = (data as { items: ServerRepo[] } | undefined)?.items ?? []
+  const repos = user ? allRepos.filter(r => r.ownerUsername !== user.username) : []
 
   return (
     <section className="p-3">
