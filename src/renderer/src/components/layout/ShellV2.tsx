@@ -7,12 +7,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Outlet, useParams, useNavigate } from 'react-router-dom';
+import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { colors, fontFamily } from '@renderer/design/theme';
 import { useWindowSize } from '@renderer/hooks/useWindowSize';
 import HeaderV2 from './HeaderV2';
 import SidebarV2 from './SidebarV2';
+import AdminSidebarV2 from './AdminSidebarV2';
 import { SettingsModal } from '@renderer/components/modals/SettingsModal';
 import { SearchModal } from '@renderer/components/modals/SearchModal';
 import { invoke } from '@renderer/services/ipcClient';
@@ -20,10 +21,14 @@ import { invoke } from '@renderer/services/ipcClient';
 export default function ShellV2() {
   const { repoId } = useParams<{ repoId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { showRightPanel } = useWindowSize();
   const [showSettings, setShowSettings] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+
+  /* 관리자 모드 여부 — /admin/* 경로 진입 시 사이드바 교체 */
+  const isAdminMode = location.pathname.startsWith('/admin');
 
   /* 현재 경로 (FilesPage에서 커스텀 이벤트로 동기화) */
   const [currentPath, setCurrentPath] = useState('');
@@ -122,9 +127,9 @@ export default function ShellV2() {
         onNavigate={handleBreadcrumbNavigate}
       />
 
-      {/* 본문: 사이드바 + 메인 */}
+      {/* 본문: 사이드바 + 메인 (관리자 모드일 때 AdminSidebarV2로 교체) */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <SidebarV2 onCreateRepo={handleCreateRepo} />
+        {isAdminMode ? <AdminSidebarV2 /> : <SidebarV2 onCreateRepo={handleCreateRepo} />}
         <main
           style={{
             flex: 1,

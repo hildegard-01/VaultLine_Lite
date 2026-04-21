@@ -6,6 +6,44 @@ VaultLine Lite 변경 이력입니다. [Keep a Changelog](https://keepachangelog
 
 ## [Unreleased]
 
+### 추가 (Phase U — 관리자 UI + FilesPage V2 재구축)
+
+**FilesPage V2 재작성**
+- `FileToolbarV2` — V2 인라인 스타일, 벌크 액션바 분리 (업로드/새폴더/잠금규칙 + 이동/잠금/공유/삭제)
+- `FileTableV2` — 7컬럼 (체크박스/★/이름+칩/크기/리비전/수정일/⋮), 폴더 드롭·앱 외부 드래그 유지
+- `FileRightPanelV2` — 와이어프레임 섹션 3의 5섹션 (선택파일/메타+태그/버전이력/공유/작업)
+- FilesPage.tsx 내부 로직·IPC·모달 12개는 무변경 (import 교체만)
+
+**관리자 페이지 (서버 없이 오프라인 동작)**
+- `AdminSidebarV2` — ShellV2가 `/admin/*` 경로에서 사이드바만 관리자 버전으로 교체 (← 파일로 돌아가기 + 관리/설정/모니터링 3섹션)
+- AdminDashboard — 메트릭 4카드 (저장소/총 사용량/디스크/경고) + 최근 활동 5건
+- AdminUsers — 저장소별 P2P 공유 사용자 관리 (상태/실패 카운터/비밀번호 변경)
+- AdminRepos — 쿼터 설정 + 30일 예약 삭제/복구
+- AdminSettings — 일반/파일 카테고리별 설정 + 카테고리 초기화
+- AdminSystemInfo — 버전·플랫폼·업타임 + 서비스 헬스체크 + 디스크 사용량 (30초 자동 갱신)
+- AdminBackup — 즉시 백업 (DB/SVN 선택) + 부분 복원
+- AdminActivityLog — 통계 4카드 + 필터(저장소/액션) + 페이지네이션 + CSV 내보내기
+
+**신규 IPC 10개**
+- `activity:stats`, `activity:export-csv`
+- `repo:admin-list`, `repo:set-quota`, `repo:mark-deletion`, `repo:cancel-deletion`
+- `system:health-check`, `system:info-full` (신규 `system.ipc.ts`)
+- `settings:reset-category`
+- `shared-user:reset-password` (+ update 핸들러에 `status` 지원 추가)
+
+**DB 마이그레이션 v2 → v3**
+- `repositories` 테이블에 `quota_bytes`, `pending_deletion_at` 컬럼 추가
+- `shared_users` 테이블에 `status`, `last_login_at`, `failed_login_count` 컬럼 추가
+- `addColumnIfMissing` 멱등 ALTER (기존 DB에 안전 적용)
+
+**기존 IPC 인자 확장**
+- `backup:create` — `{ includeDB?, includeSVN? }` 인자 추가 (부분 백업)
+- `backup:restore` — `{ id, includeDB?, includeSVN? }` (부분 복원)
+- `shared-user:update` — `status` 필드 추가
+
+**Placeholder**
+- `/admin/groups`, `/admin/approval-rules` — 오프라인 placeholder (서버 연동 시 활성화 예정)
+
 ### 추가 (Phase A-2 — V2 UI 선행 복원)
 - V2 디자인 시스템 (theme.ts 컬러/레이아웃 토큰, Icons.tsx 33개 SVG 아이콘)
 - Pretendard 웹폰트 적용

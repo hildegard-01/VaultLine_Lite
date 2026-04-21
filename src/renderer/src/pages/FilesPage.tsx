@@ -2,9 +2,9 @@ import { useState, useCallback, useEffect } from 'react'
 import { useParams, useOutletContext, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@renderer/services/ipcClient'
-import { FileToolbar } from '@renderer/components/files/FileToolbar'
-import { FileTable } from '@renderer/components/files/FileTable'
-import { FileRightPanel } from '@renderer/components/files/FileRightPanel'
+import { FileToolbarV2 } from '@renderer/components/files/FileToolbarV2'
+import { FileTableV2 } from '@renderer/components/files/FileTableV2'
+import { FileRightPanelV2 } from '@renderer/components/files/FileRightPanelV2'
 import { DropZone } from '@renderer/components/files/DropZone'
 import { PendingChangesBar } from '@renderer/components/files/PendingChangesBar'
 import { CommitModal } from '@renderer/components/modals/CommitModal'
@@ -575,7 +575,7 @@ export function FilesPage(): React.JSX.Element {
           </div>
         )}
 
-        <FileToolbar
+        <FileToolbarV2
           itemCount={tagFilter ? tagFilterFiles.length : files.length}
           checkedCount={checkedPaths.size}
           onUpload={handleUpload}
@@ -594,7 +594,7 @@ export function FilesPage(): React.JSX.Element {
           onCommitFile={handleCommitSingleFile}
           onDiscardFile={handleDiscardSingleFile}
         />
-        <FileTable
+        <FileTableV2
           files={tagFilter
             ? tagFilterFiles
                 .filter(tf => tf.repoId === numRepoId)
@@ -624,7 +624,7 @@ export function FilesPage(): React.JSX.Element {
       </div>
 
       {context?.showRightPanel && (
-        <FileRightPanel
+        <FileRightPanelV2
           file={selectedFile}
           repoId={numRepoId}
           recentCommits={commits}
@@ -637,6 +637,7 @@ export function FilesPage(): React.JSX.Element {
           onClearSelection={() => setSelectedFile(null)}
           onTagsChanged={() => setTagVersion(v => v + 1)}
           onDetail={(file) => navigate(`/file/${repoId}?path=${encodeURIComponent(file.path)}`)}
+          onUploadNewVersion={handleUpload}
         />
       )}
 

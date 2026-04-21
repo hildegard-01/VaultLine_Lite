@@ -1,0 +1,2280 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>VaultLine V2 — 현재 구현 와이어프레임 (1차 샘플)</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #fff;
+    --border: #d0d4dc;
+    --border-strong: #98a0ac;
+    --label: #5f6368;
+    --label-strong: #1a1a2e;
+    --muted: #999;
+    --navy: #1B2A4A;
+    --accent: #1565C0;
+    --accent-bg: #e8f4fd;
+    --warn: #E65100;
+    --warn-bg: #FFF3E0;
+    --danger: #E74C3C;
+    --danger-bg: #FFEBEE;
+    --green: #2E7D32;
+    --green-bg: #E8F5E9;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    color: var(--label-strong);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  /* ─── 페이지 셸 ─── */
+  .doc {
+    display: flex;
+    min-height: 100vh;
+  }
+  .toc {
+    width: 240px;
+    background: #fff;
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .toc h1 { font-size: 14px; margin: 0 0 4px; color: var(--navy); }
+  .toc .sub { font-size: 11px; color: var(--muted); margin-bottom: 16px; }
+  .toc a {
+    display: block;
+    padding: 6px 10px;
+    color: var(--label);
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .toc a:hover { background: #f5f5f5; color: var(--navy); }
+  .toc h2 { font-size: 10px; text-transform: uppercase; color: var(--muted); margin: 16px 0 4px; padding: 0 10px; letter-spacing: .5px; }
+  .content {
+    flex: 1;
+    padding: 32px 40px;
+    max-width: 1400px;
+  }
+  /* ─── 섹션 카드 ─── */
+  .section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+  .section > h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    color: var(--navy);
+  }
+  .section > .meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .section > .meta code {
+    background: #f0f0f0;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  /* ─── 와이어프레임 박스 공통 ─── */
+  .wf {
+    border: 1px solid var(--border-strong);
+    background: #fafbfc;
+    margin-bottom: 16px;
+  }
+  .wf-label {
+    background: #eef0f4;
+    color: var(--label);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .wf-body { padding: 8px; }
+  /* ─── 셸 와이어프레임 ─── */
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: 700px;
+    border: 2px solid var(--border-strong);
+    background: #fff;
+  }
+  .shell-header {
+    height: 52px;
+    background: var(--navy);
+    color: rgba(255,255,255,0.85);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+  .shell-header .logo { font-weight: 700; color: #fff; }
+  .shell-header .crumb { color: rgba(255,255,255,0.5); flex: 1; }
+  .shell-header .pill {
+    background: rgba(255,255,255,0.08);
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 11px;
+    min-width: 180px;
+  }
+  .shell-header .icon-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    position: relative;
+  }
+  .shell-header .badge {
+    position: absolute; top: -2px; right: -2px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 8px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .shell-header .user {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 8px;
+    border-radius: 16px;
+  }
+  .shell-header .avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  .shell-body { display: flex; flex: 1; overflow: hidden; }
+  .shell-sidebar {
+    width: 220px;
+    background: #fff;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+    font-size: 12px;
+  }
+  .sb-section {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 16px 4px;
+    letter-spacing: .5px;
+    font-weight: 600;
+    display: flex; justify-content: space-between;
+  }
+  .sb-item {
+    padding: 7px 16px;
+    color: var(--label);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sb-item.active {
+    background: var(--accent-bg);
+    color: var(--navy);
+    font-weight: 600;
+    border-right: 3px solid var(--navy);
+  }
+  .sb-item .ic { color: var(--muted); font-style: normal; width: 14px; display: inline-block; text-align: center; }
+  .sb-divider { height: 1px; background: var(--border); margin: 8px 16px; }
+  .sb-quota {
+    margin-top: auto;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .sb-quota .lbl { font-size: 10px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+  .sb-quota .txt { font-size: 11px; color: var(--label); margin-bottom: 4px; }
+  .sb-quota .bar { height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden; }
+  .sb-quota .bar > div { height: 100%; width: 35%; background: linear-gradient(90deg, #4ECDC4, #44A8B3); }
+
+  .shell-main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    background: #fff;
+  }
+  .main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .right-panel {
+    width: 320px;
+    background: #fafafa;
+    border-left: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+
+  /* ─── 메모 박스 ─── */
+  .notes {
+    background: #fffbe6;
+    border: 1px dashed #d4b85e;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-top: 16px;
+    font-size: 12px;
+    color: #8a6d3b;
+  }
+  .notes strong { color: #5d4626; }
+  .notes ul { margin: 6px 0 0; padding-left: 20px; }
+
+  /* ─── 영역 박스 (와이어프레임 내부 요소) ─── */
+  .area {
+    border: 1px dashed var(--border-strong);
+    padding: 8px 10px;
+    color: var(--label);
+    font-size: 11px;
+    background: #fff;
+    margin-bottom: 6px;
+  }
+  .area .a-label {
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    letter-spacing: .5px;
+  }
+  .area-inline {
+    display: inline-block;
+    border: 1px dashed var(--border-strong);
+    padding: 4px 8px;
+    margin-right: 4px;
+    background: #fff;
+    font-size: 11px;
+    color: var(--label);
+  }
+  .btn-mock {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-right: 4px;
+  }
+  .btn-mock.ghost {
+    background: #fff;
+    color: var(--label);
+    border: 1px solid var(--border);
+  }
+  .btn-mock.danger { background: var(--danger); }
+
+  /* ─── 로그인 화면 ─── */
+  .login-frame {
+    background: var(--bg);
+    padding: 60px 0;
+    display: flex;
+    justify-content: center;
+    border: 2px solid var(--border-strong);
+  }
+  .login-card {
+    width: 360px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    padding: 36px;
+  }
+  .login-card .logo {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .login-card .logo h1 { font-size: 22px; color: var(--navy); margin: 0; }
+  .login-card .logo p { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
+  .input-mock {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 10px;
+    background: #fff;
+  }
+  .login-card .hint { font-size: 11px; color: var(--muted); margin: 4px 0 16px; }
+  .login-card .submit {
+    background: var(--navy);
+    color: #fff;
+    text-align: center;
+    padding: 11px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  /* ─── 파일 탐색기 ─── */
+  .files-toolbar {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    background: #fff;
+  }
+  .breadcrumb-mock {
+    font-size: 11px;
+    color: var(--label);
+    margin-bottom: 8px;
+  }
+  .breadcrumb-mock span { color: var(--muted); margin: 0 4px; }
+  .toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .file-row {
+    display: grid;
+    grid-template-columns: 28px 28px 1fr 80px 100px 120px 60px;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 11px;
+    color: var(--label);
+    align-items: center;
+  }
+  .file-row.head {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    background: #fafbfc;
+    font-weight: 600;
+  }
+  .file-row.selected { background: var(--accent-bg); }
+  .chip {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    margin-right: 3px;
+  }
+  .chip.lock { background: var(--warn-bg); color: var(--warn); }
+  .chip.share { background: var(--green-bg); color: var(--green); }
+  .chip.tag { background: #f0f0f0; color: var(--label); }
+
+  .rp-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rp-section h3 {
+    font-size: 11px;
+    margin: 0 0 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-weight: 600;
+  }
+  .rp-section .v { font-size: 12px; color: var(--label-strong); }
+
+  /* ─── 관리자 대시보드 ─── */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+  .metric {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--navy);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .metric.green { border-left-color: var(--green); }
+  .metric.blue { border-left-color: var(--accent); }
+  .metric.red { border-left-color: var(--danger); }
+  .metric .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+  .metric .val { font-size: 22px; font-weight: 800; color: var(--label-strong); }
+  .metric .sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .activity-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0 16px 16px;
+    padding: 16px;
+  }
+  .activity-card h3 { font-size: 13px; margin: 0 0 12px; color: var(--label-strong); }
+  .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 11px;
+    color: var(--label);
+  }
+  .activity-row .ic-circle {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--accent-bg);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .activity-row .who { color: var(--label-strong); font-weight: 600; }
+  .activity-row .when { color: var(--muted); margin-left: auto; font-size: 10px; }
+
+  /* ─── 부가 ─── */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--label);
+  }
+  .legend .swatch {
+    display: inline-block;
+    width: 14px; height: 14px;
+    margin-right: 6px;
+    vertical-align: middle;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .footer-note {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 40px;
+    padding: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ─── 페이지 메인영역 프레임 (셸 축약) ─── */
+  .page-frame {
+    border: 2px solid var(--border-strong);
+    background: #fff;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .page-frame .shell-mini {
+    height: 28px;
+    background: var(--navy);
+    color: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 10px;
+    gap: 8px;
+  }
+  .page-frame .shell-mini .pill {
+    background: rgba(255,255,255,0.1);
+    padding: 1px 8px;
+    border-radius: 8px;
+    font-size: 9px;
+  }
+  .page-frame .body-mini {
+    display: flex;
+    min-height: 460px;
+  }
+  .page-frame .sb-mini {
+    width: 60px;
+    background: #fafafa;
+    border-right: 1px solid var(--border);
+    padding: 8px 6px;
+    font-size: 9px;
+    color: var(--muted);
+    flex-shrink: 0;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .page-frame .main-mini {
+    flex: 1;
+    overflow: hidden;
+  }
+  .page-frame .right-mini {
+    background: #fafafa;
+    border-left: 1px solid var(--border);
+    padding: 12px;
+    font-size: 11px;
+    color: var(--label);
+    flex-shrink: 0;
+  }
+  /* 표 공통 */
+  .mini-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .mini-table th {
+    background: #fafbfc;
+    padding: 6px 8px;
+    text-align: left;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .mini-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    color: var(--label);
+  }
+  .mini-table tr.selected td { background: var(--accent-bg); }
+  /* 카드 */
+  .mini-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .mini-card.left-bd { border-left: 4px solid var(--navy); }
+  .mini-card.left-bd.warn { border-left-color: var(--warn); }
+  .mini-card.left-bd.green { border-left-color: var(--green); }
+  .mini-card.left-bd.danger { border-left-color: var(--danger); }
+  /* 섹션 제목 (메인 영역 안) */
+  .pg-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--label-strong);
+    padding: 14px 16px 4px;
+    margin: 0;
+  }
+  /* 탭 바 */
+  .tab-bar {
+    display: flex;
+    border-bottom: 2px solid var(--border);
+    padding: 0 16px;
+    margin-bottom: 8px;
+  }
+  .tab-bar > span {
+    padding: 8px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+  }
+  .tab-bar > span.active {
+    color: var(--navy);
+    font-weight: 700;
+    border-bottom-color: var(--navy);
+  }
+  /* 토글 */
+  .toggle-mock {
+    display: inline-block;
+    width: 28px; height: 14px;
+    border-radius: 7px;
+    background: var(--accent);
+    position: relative;
+    vertical-align: middle;
+  }
+  .toggle-mock::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    top: 2px; right: 2px;
+  }
+  .toggle-mock.off { background: #ccc; }
+  .toggle-mock.off::after { right: auto; left: 2px; }
+  /* 섹션 모드 뱃지 */
+  .mode-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .mode-badge.user { background: var(--accent-bg); color: var(--navy); }
+  .mode-badge.admin { background: #f3e5f5; color: #6A1B9A; }
+  .mode-badge.standalone { background: #fff3e0; color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="doc">
+  <!-- ───────── 좌측 네비게이션 ───────── -->
+  <nav class="toc">
+    <h1>VaultLine V2</h1>
+    <div class="sub">현재 구현 와이어프레임<br>1차 샘플 (4개)</div>
+
+    <h2>구조</h2>
+    <a href="#shell">공통 셸 (사용자/관리자)</a>
+
+    <h2>사용자 페이지</h2>
+    <a href="#login">로그인</a>
+    <a href="#files">파일 탐색기</a>
+    <a href="#file-detail">파일 상세</a>
+    <a href="#shares">공유 관리</a>
+    <a href="#approvals">문서 승인</a>
+    <a href="#bookmarks">즐겨찾기</a>
+    <a href="#tags">태그</a>
+    <a href="#trash">휴지통</a>
+    <a href="#activity">내 활동</a>
+    <a href="#notifications">알림</a>
+    <a href="#password">비밀번호 변경</a>
+    <a href="#public-link">공개 링크</a>
+
+    <h2>관리자 페이지</h2>
+    <a href="#admin-dashboard">대시보드</a>
+    <a href="#admin-users">사용자 관리</a>
+    <a href="#admin-groups">그룹 관리</a>
+    <a href="#admin-repos">저장소 관리</a>
+    <a href="#admin-settings">시스템 설정</a>
+    <a href="#admin-system">시스템 정보</a>
+    <a href="#admin-backup">백업 관리</a>
+    <a href="#admin-activity-log">활동 로그</a>
+    <a href="#admin-approval-rules">승인규칙</a>
+    <a href="#admin-tag-manage">태그 관리</a>
+
+    <h2>참고</h2>
+    <a href="#legend">범례 / 디자인 토큰</a>
+  </nav>
+
+  <!-- ───────── 본문 ───────── -->
+  <main class="content">
+
+    <h1 style="margin:0 0 4px;color:var(--navy);">VaultLine — 현재 구현 와이어프레임 (V2)</h1>
+    <p style="color:var(--muted);margin:0 0 24px;font-size:12px;">
+      1차 샘플 4개 · 디자인 변경 논의용 · 추출 기준: <code>frontend/src/pages/v2/</code>, <code>frontend/src/components/v2/</code>
+    </p>
+
+    <!-- ─────── 범례 ─────── -->
+    <div class="legend" id="legend">
+      <span><span class="swatch" style="background:var(--navy);"></span>네이비 #1B2A4A — 헤더/사이드바 강조</span>
+      <span><span class="swatch" style="background:var(--accent-bg);"></span>활성 메뉴 배경</span>
+      <span><span class="swatch" style="background:var(--warn-bg);"></span>경고 (잠금)</span>
+      <span><span class="swatch" style="background:var(--green-bg);"></span>공유 표시</span>
+      <span><span class="swatch" style="background:var(--danger);"></span>삭제/오류</span>
+      <span style="margin-left:auto;">헤더 52px · 사이드바 220px · 우측패널 320px</span>
+    </div>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                     공통 셸                        -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="shell">
+      <h2>1. 공통 셸 — 사용자 모드</h2>
+      <div class="meta">
+        <code>ShellV2.tsx</code> · <code>HeaderV2.tsx</code> · <code>SidebarV2.tsx</code><br>
+        헤더 52px(네이비) + 사이드바 220px(흰색) + 메인 + (페이지에 따라) 우측패널 320px
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">전체 셸 — 일반 사용자 모드 (예: 파일 탐색기 진입)</div>
+        <div class="shell">
+          <!-- 헤더 -->
+          <div class="shell-header">
+            <span class="logo">VaultLine</span>
+            <span class="crumb">/ 빵부스러기 영역 (공유받은 문서 / 즐겨찾기 등)</span>
+            <span class="pill">🔍 검색...  ⌘K</span>
+            <span class="icon-btn">🔔<span class="badge">3</span></span>
+            <span class="user"><span class="avatar">홍</span> 홍길동 ▾</span>
+          </div>
+          <!-- 본문 -->
+          <div class="shell-body">
+            <!-- 사이드바 -->
+            <aside class="shell-sidebar">
+              <div class="sb-section"><span>개인공간</span><span>▾</span></div>
+              <div class="sb-item active"><i class="ic">📁</i> user_hong</div>
+              <div class="sb-section"><span>팀공간</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">👥</i> team_design</div>
+              <div class="sb-item"><i class="ic">👥</i> team_dev</div>
+              <div class="sb-divider"></div>
+              <div class="sb-section"><span>바로가기</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">↗</i> 공유받은 문서</div>
+              <div class="sb-item"><i class="ic">★</i> 즐겨찾기</div>
+              <div class="sb-item"><i class="ic">#</i> 태그</div>
+              <div class="sb-item"><i class="ic">🗑</i> 휴지통</div>
+              <div class="sb-quota">
+                <div class="lbl">저장공간</div>
+                <div class="txt">3.5 GB / 10 GB</div>
+                <div class="bar"><div></div></div>
+              </div>
+            </aside>
+            <!-- 메인 -->
+            <div class="shell-main">
+              <div class="main-area">
+                <div class="area" style="margin:12px 16px 6px;">
+                  <div class="a-label">메인 영역 (Outlet)</div>
+                  페이지별 콘텐츠 — 여기에 FilesPageV2, SharesPageV2, BookmarksPageV2 등이 렌더링됨
+                </div>
+              </div>
+              <div class="right-panel">
+                <div class="rp-section">
+                  <h3>우측 패널 (선택적)</h3>
+                  <div class="v">파일 탐색기·상세 보기에서만 사용. 메타데이터/버전이력/공유설정 표시</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">사이드바 — 관리자 모드</div>
+        <div class="shell" style="height:520px;">
+          <div class="shell-header">
+            <span class="logo">VaultLine</span>
+            <span class="crumb">관리자</span>
+            <span class="pill">🔍 검색...  ⌘K</span>
+            <span class="icon-btn">🔔</span>
+            <span class="user"><span class="avatar">A</span> Admin ▾</span>
+          </div>
+          <div class="shell-body">
+            <aside class="shell-sidebar">
+              <div style="margin:8px 12px;padding:8px 12px;background:#f0f4ff;border-radius:6px;color:var(--navy);font-size:12px;">← 파일로 돌아가기</div>
+              <div class="sb-section"><span>관리</span><span>▾</span></div>
+              <div class="sb-item active"><i class="ic">⊞</i> 대시보드</div>
+              <div class="sb-item"><i class="ic">👥</i> 사용자</div>
+              <div class="sb-item"><i class="ic">⊟</i> 그룹</div>
+              <div class="sb-item"><i class="ic">🗄</i> 저장소</div>
+              <div class="sb-section"><span>설정</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">⚙</i> 일반설정</div>
+              <div class="sb-item"><i class="ic">🏷</i> 태그관리</div>
+              <div class="sb-item"><i class="ic">✓</i> 승인규칙</div>
+              <div class="sb-section"><span>모니터링</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">📊</i> 활동로그</div>
+              <div class="sb-item"><i class="ic">🛡</i> 시스템</div>
+              <div class="sb-item"><i class="ic">💾</i> 백업</div>
+            </aside>
+            <div class="shell-main">
+              <div class="main-area">
+                <div class="area" style="margin:12px 16px;">
+                  <div class="a-label">메인 영역</div>
+                  관리자 페이지 콘텐츠 (관리자 모드에는 우측 패널 없음)
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>헤더 빵부스러기가 단순 텍스트 ("관리자", "공유받은 문서" 등)로만 표시됨 — 실제 경로 계층은 본문 내 별도 빵부스러기로 노출</li>
+          <li>관리자 모드는 사이드바 상단 "← 파일로 돌아가기" 버튼으로 모드 전환</li>
+          <li>쿼터 바는 사용자 모드 사이드바 하단 고정</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                     로그인                         -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="login">
+      <h2>2. 로그인</h2>
+      <div class="meta">
+        <code>LoginPageV2.tsx</code> · 셸 없이 단독 화면 · 중앙 정렬 카드형
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">전체 화면 (셸 없음)</div>
+        <div class="login-frame">
+          <div class="login-card">
+            <div class="logo">
+              <h1>VaultLine</h1>
+              <p>SVN 기반 문서 버전관리 포탈</p>
+            </div>
+            <div class="input-mock">사용자 ID</div>
+            <div class="input-mock">비밀번호</div>
+            <div class="hint">5회 실패 시 15분 잠금</div>
+            <div class="submit">로그인</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">에러 상태 (잠김)</div>
+        <div class="login-frame">
+          <div class="login-card">
+            <div class="logo"><h1>VaultLine</h1><p>SVN 기반 문서 버전관리 포탈</p></div>
+            <div class="input-mock">사용자 ID</div>
+            <div class="input-mock">비밀번호</div>
+            <div class="hint">5회 실패 시 15분 잠금</div>
+            <div style="background:var(--warn-bg);color:var(--warn);padding:10px 12px;border-radius:6px;font-size:12px;margin-bottom:12px;">
+              🔒 계정이 잠겼습니다. 15분 후 다시 시도하세요.
+            </div>
+            <div class="submit">로그인</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>카드 너비 400px(max), padding 40px — 단순한 단일 컬럼</li>
+          <li>로그인 실패 메시지는 잠금/일반 두 가지 스타일로 분기 (주황 배경 vs 빨간 텍스트)</li>
+          <li>"5회 실패 시 15분 잠금" 안내가 항상 노출됨</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                  파일 탐색기                       -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="files">
+      <h2>3. 파일 탐색기</h2>
+      <div class="meta">
+        <code>FilesPageV2.tsx</code> + <code>FileToolbarV2</code> + <code>FileTableV2</code> + <code>FileRightPanelV2</code> + <code>BulkActionBar</code> + <code>CommitModal</code>
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">전체 셸 + 파일 탐색기 메인</div>
+        <div class="shell" style="height:760px;">
+          <!-- 헤더 -->
+          <div class="shell-header">
+            <span class="logo">VaultLine</span>
+            <span class="crumb"></span>
+            <span class="pill">🔍 검색...  ⌘K</span>
+            <span class="icon-btn">🔔<span class="badge">3</span></span>
+            <span class="user"><span class="avatar">홍</span> 홍길동 ▾</span>
+          </div>
+          <div class="shell-body">
+            <!-- 사이드바 -->
+            <aside class="shell-sidebar">
+              <div class="sb-section"><span>개인공간</span><span>▾</span></div>
+              <div class="sb-item active"><i class="ic">📁</i> user_hong</div>
+              <div class="sb-section"><span>팀공간</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">👥</i> team_design</div>
+              <div class="sb-divider"></div>
+              <div class="sb-section"><span>바로가기</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">↗</i> 공유받은 문서</div>
+              <div class="sb-item"><i class="ic">★</i> 즐겨찾기</div>
+              <div class="sb-item"><i class="ic">#</i> 태그</div>
+              <div class="sb-item"><i class="ic">🗑</i> 휴지통</div>
+              <div class="sb-quota">
+                <div class="lbl">저장공간</div>
+                <div class="txt">3.5 GB / 10 GB</div>
+                <div class="bar"><div></div></div>
+              </div>
+            </aside>
+            <!-- 메인 -->
+            <div class="shell-main">
+              <div class="main-area">
+                <!-- 빵부스러기 + 툴바 -->
+                <div class="files-toolbar">
+                  <div class="breadcrumb-mock">
+                    <strong>user_hong</strong><span>/</span>프로젝트<span>/</span><strong>2026-Q1</strong>
+                  </div>
+                  <div class="toolbar-row">
+                    <span class="btn-mock">⬆ 업로드</span>
+                    <span class="btn-mock ghost">＋ 새 폴더</span>
+                    <span class="area-inline">정렬 ▾ 이름</span>
+                    <span class="area-inline">보기 ▾ 목록</span>
+                    <span style="margin-left:auto;color:var(--muted);font-size:11px;">12개 항목</span>
+                  </div>
+                </div>
+
+                <!-- 벌크 액션 바 (선택 시) -->
+                <div style="background:var(--accent-bg);padding:8px 16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--navy);display:flex;align-items:center;gap:8px;">
+                  ✓ 3개 선택됨
+                  <span class="btn-mock ghost" style="padding:2px 8px;">다운로드</span>
+                  <span class="btn-mock ghost" style="padding:2px 8px;">이동</span>
+                  <span class="btn-mock ghost" style="padding:2px 8px;">잠금</span>
+                  <span class="btn-mock ghost" style="padding:2px 8px;">공유</span>
+                  <span class="btn-mock danger" style="padding:2px 8px;">삭제</span>
+                  <span style="margin-left:auto;color:var(--muted);">선택 해제</span>
+                </div>
+
+                <!-- 테이블 -->
+                <div style="overflow-y:auto;flex:1;">
+                  <div class="file-row head">
+                    <span>☐</span>
+                    <span>★</span>
+                    <span>이름</span>
+                    <span>크기</span>
+                    <span>리비전</span>
+                    <span>최종 수정</span>
+                    <span>작업</span>
+                  </div>
+                  <div class="file-row">
+                    <span>☐</span><span>☆</span>
+                    <span>📁 design/</span>
+                    <span>—</span><span>r142</span><span>홍길동 · 1시간 전</span><span>⋮</span>
+                  </div>
+                  <div class="file-row selected">
+                    <span>☑</span><span>★</span>
+                    <span>📄 사양서_v3.docx <span class="chip lock">🔒 김</span> <span class="chip share">공유</span> <span class="chip tag">중요</span></span>
+                    <span>2.4 MB</span><span>r140</span><span>김개발 · 어제</span><span>⋮</span>
+                  </div>
+                  <div class="file-row">
+                    <span>☑</span><span>☆</span>
+                    <span>📄 발표자료.pptx</span>
+                    <span>5.1 MB</span><span>r138</span><span>이디자 · 3일 전</span><span>⋮</span>
+                  </div>
+                  <div class="file-row">
+                    <span>☑</span><span>★</span>
+                    <span>📄 회의록.md</span>
+                    <span>12 KB</span><span>r137</span><span>홍길동 · 5일 전</span><span>⋮</span>
+                  </div>
+                  <div class="file-row">
+                    <span>☐</span><span>☆</span>
+                    <span>📄 계약서.pdf <span class="chip share" style="background:#FFF3E0;color:#E65100;">받음</span></span>
+                    <span>—</span><span>r—</span><span>박법무 · 1주 전</span><span>⋮</span>
+                  </div>
+                  <div style="text-align:center;color:var(--muted);font-size:11px;padding:24px;">
+                    (스크롤 시 추가 행 …)
+                  </div>
+                </div>
+              </div>
+
+              <!-- 우측 패널: 선택 파일 상세 -->
+              <div class="right-panel">
+                <div class="rp-section">
+                  <h3>선택 파일</h3>
+                  <div class="v" style="font-weight:600;">사양서_v3.docx</div>
+                  <div style="margin-top:8px;">
+                    <span class="btn-mock" style="padding:3px 8px;font-size:10px;">새 버전 업로드</span>
+                  </div>
+                </div>
+                <div class="rp-section">
+                  <h3>메타데이터</h3>
+                  <div class="v">크기: 2.4 MB</div>
+                  <div class="v">리비전: r140</div>
+                  <div class="v">잠금: 김개발 (2시간 전)</div>
+                  <div class="v">태그: 중요, 사양서</div>
+                </div>
+                <div class="rp-section">
+                  <h3>버전 이력</h3>
+                  <div class="v">r140 · 김개발 · 어제</div>
+                  <div class="v">r135 · 홍길동 · 3일 전</div>
+                  <div class="v">r130 · 김개발 · 1주 전</div>
+                  <div style="font-size:10px;color:var(--muted);margin-top:4px;">전체 보기 →</div>
+                </div>
+                <div class="rp-section">
+                  <h3>공유</h3>
+                  <div class="v">team_design (읽기/쓰기)</div>
+                  <div class="v">link · 공개링크 (만료 7일)</div>
+                  <div style="margin-top:6px;">
+                    <span class="btn-mock ghost" style="padding:3px 8px;font-size:10px;">공유 관리</span>
+                  </div>
+                </div>
+                <div class="rp-section">
+                  <h3>작업</h3>
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    <span class="btn-mock ghost" style="font-size:10px;">미리보기</span>
+                    <span class="btn-mock ghost" style="font-size:10px;">다운로드</span>
+                    <span class="btn-mock ghost" style="font-size:10px;">이름 변경</span>
+                    <span class="btn-mock danger" style="font-size:10px;">삭제</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">CommitModal — 업로드/변경 시 커밋 메시지 입력</div>
+        <div style="background:rgba(0,0,0,0.4);padding:60px;display:flex;justify-content:center;">
+          <div style="background:#fff;border-radius:8px;width:480px;padding:24px;border:1px solid var(--border);">
+            <h3 style="margin:0 0 4px;font-size:14px;">커밋 메시지</h3>
+            <p style="font-size:11px;color:var(--muted);margin:0 0 16px;">대상: 사양서_v3.docx (새 버전)</p>
+            <div class="input-mock" style="margin-bottom:8px;">제목 (필수)</div>
+            <div class="input-mock" style="height:60px;margin-bottom:16px;">상세 설명 (선택)</div>
+            <div style="text-align:right;">
+              <span class="btn-mock ghost">취소</span>
+              <span class="btn-mock">커밋</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>파일 행은 체크박스/즐겨찾기/이름/크기/리비전/최종수정/작업메뉴 7컬럼. 이름 셀 안에 잠금·공유·태그 칩이 함께 노출되어 정보 밀도가 높음</li>
+          <li>벌크 액션 바는 행 선택 시에만 등장 (테이블 상단 인라인)</li>
+          <li>우측 패널 320px — 메타/버전이력/공유/작업 4섹션. 모바일에서는 어떻게 처리할지 미정</li>
+          <li>모든 변경(업로드/이름변경/삭제/폴더생성)은 CommitModal로 커밋 메시지 입력 필수</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                관리자 대시보드                     -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-dashboard">
+      <h2>4. 관리자 대시보드</h2>
+      <div class="meta">
+        <code>AdminDashboardV2.tsx</code> · 메트릭 카드 4종 + 최근 활동 리스트
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">전체 셸 (관리자 모드) + 대시보드 메인</div>
+        <div class="shell" style="height:720px;">
+          <div class="shell-header">
+            <span class="logo">VaultLine</span>
+            <span class="crumb">관리자</span>
+            <span class="pill">🔍 검색...  ⌘K</span>
+            <span class="icon-btn">🔔</span>
+            <span class="user"><span class="avatar">A</span> Admin ▾</span>
+          </div>
+          <div class="shell-body">
+            <aside class="shell-sidebar">
+              <div style="margin:8px 12px;padding:8px 12px;background:#f0f4ff;border-radius:6px;color:var(--navy);font-size:12px;">← 파일로 돌아가기</div>
+              <div class="sb-section"><span>관리</span><span>▾</span></div>
+              <div class="sb-item active"><i class="ic">⊞</i> 대시보드</div>
+              <div class="sb-item"><i class="ic">👥</i> 사용자</div>
+              <div class="sb-item"><i class="ic">⊟</i> 그룹</div>
+              <div class="sb-item"><i class="ic">🗄</i> 저장소</div>
+              <div class="sb-section"><span>설정</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">⚙</i> 일반설정</div>
+              <div class="sb-item"><i class="ic">🏷</i> 태그관리</div>
+              <div class="sb-item"><i class="ic">✓</i> 승인규칙</div>
+              <div class="sb-section"><span>모니터링</span><span>▾</span></div>
+              <div class="sb-item"><i class="ic">📊</i> 활동로그</div>
+              <div class="sb-item"><i class="ic">🛡</i> 시스템</div>
+              <div class="sb-item"><i class="ic">💾</i> 백업</div>
+            </aside>
+            <div class="shell-main">
+              <div class="main-area" style="background:var(--bg);overflow-y:auto;">
+                <h2 style="font-size:18px;margin:20px 16px 12px;color:var(--label-strong);">관리자 대시보드</h2>
+
+                <div class="dash-grid">
+                  <div class="metric">
+                    <div class="lbl">전체 사용자</div>
+                    <div class="val">42</div>
+                    <div class="sub">활성 38 · 잠김 1 · 비활성 4</div>
+                  </div>
+                  <div class="metric green">
+                    <div class="lbl">저장소</div>
+                    <div class="val">28</div>
+                    <div class="sub">개인 - · 팀 -</div>
+                  </div>
+                  <div class="metric blue">
+                    <div class="lbl">디스크 사용량</div>
+                    <div class="val">187.3 GB</div>
+                    <div class="sub">전체 500 GB 중 37%</div>
+                  </div>
+                  <div class="metric red">
+                    <div class="lbl">경고</div>
+                    <div class="val">3</div>
+                    <div class="sub">쿼터 초과 2 · 계정 잠김 1</div>
+                  </div>
+                </div>
+
+                <div class="activity-card">
+                  <h3>최근 활동</h3>
+                  <div class="activity-row">
+                    <div class="ic-circle">⬆</div>
+                    <div><span class="who">홍길동</span> 파일 업로드 <span style="color:var(--muted);">/projects/사양서_v3.docx</span></div>
+                    <div class="when">2분 전</div>
+                  </div>
+                  <div class="activity-row">
+                    <div class="ic-circle" style="background:var(--green-bg);color:var(--green);">↗</div>
+                    <div><span class="who">김개발</span> 공유 생성 <span style="color:var(--muted);">/specs/api.md</span></div>
+                    <div class="when">15분 전</div>
+                  </div>
+                  <div class="activity-row">
+                    <div class="ic-circle" style="background:var(--warn-bg);color:var(--warn);">🔒</div>
+                    <div><span class="who">이디자</span> 파일 잠금 <span style="color:var(--muted);">/design/wireframe.fig</span></div>
+                    <div class="when">1시간 전</div>
+                  </div>
+                  <div class="activity-row">
+                    <div class="ic-circle" style="background:#F3E5F5;color:#6A1B9A;">👤</div>
+                    <div><span class="who">시스템</span> 사용자 생성 <span style="color:var(--muted);">박법무</span></div>
+                    <div class="when">3시간 전</div>
+                  </div>
+                  <div class="activity-row">
+                    <div class="ic-circle" style="background:#F3E5F5;color:#6A1B9A;">✓</div>
+                    <div><span class="who">관리자</span> 승인 처리 <span style="color:var(--muted);">/policy/v2.pdf</span></div>
+                    <div class="when">어제</div>
+                  </div>
+                  <div style="text-align:center;color:var(--muted);font-size:10px;padding:8px 0;">
+                    (스크롤 시 최대 15개)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>메트릭 카드 4개는 1행 그리드 (4열) — 모바일/태블릿 반응형 미정</li>
+          <li>각 카드는 좌측 4px 컬러 보더로 카테고리 구분 (네이비/그린/블루/레드)</li>
+          <li>최근 활동은 단일 카드 안에 무한 스크롤 (max 15개) — 더보기 / 페이지네이션 없음</li>
+          <li>대시보드에서 메트릭 카드 클릭 시 동작 미정 (현재는 정적)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                 5. 파일 상세                        -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="file-detail">
+      <h2>5. 파일 상세<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>FileDetailPageV2.tsx</code> · 파일 헤더 + 5탭 (미리보기/이력/Diff/승인/태그) + 우측 메타데이터 260px
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;"></span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="background:var(--bg);overflow-y:auto;padding:16px;">
+            <!-- 파일 헤더 카드 -->
+            <div class="mini-card" style="display:flex;align-items:center;gap:12px;">
+              <div style="width:40px;height:40px;background:var(--accent-bg);border-radius:6px;display:flex;align-items:center;justify-content:center;">📄</div>
+              <div style="flex:1;">
+                <div style="font-weight:700;">사양서_v3.docx <span class="chip lock" style="margin-left:4px;">🔒 김</span></div>
+                <div style="color:var(--muted);font-size:10px;margin-top:2px;">김개발 · r.140 · 2.4 MB · 어제</div>
+              </div>
+              <span class="btn-mock" style="padding:4px 10px;">다운로드</span>
+              <span class="btn-mock ghost" style="padding:4px 10px;">공유</span>
+              <span class="btn-mock ghost" style="padding:4px 10px;">잠금</span>
+              <span class="btn-mock ghost" style="padding:4px 10px;">← 뒤로</span>
+            </div>
+            <!-- 탭 바 -->
+            <div class="tab-bar">
+              <span class="active">미리보기</span>
+              <span>커밋 이력</span>
+              <span>Diff</span>
+              <span>승인</span>
+              <span>태그</span>
+            </div>
+            <!-- 미리보기 콘텐츠 -->
+            <div class="mini-card" style="height:240px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--muted);">
+              <div style="font-size:32px;">📄</div>
+              <div style="margin-top:8px;font-size:12px;">PDF/이미지/오피스 미리보기 영역</div>
+              <div style="font-size:10px;margin-top:4px;">(LibreOffice → pdf.js 렌더링)</div>
+              <span class="btn-mock" style="margin-top:12px;">미리보기 열기</span>
+            </div>
+          </div>
+          <!-- 우측 메타데이터 패널 260px -->
+          <div class="right-mini" style="width:260px;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:10px;">메타데이터</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:6px;">파일 정보</div>
+            <div>파일명: 사양서_v3.docx</div>
+            <div>크기: 2.4 MB</div>
+            <div>리비전: r.140</div>
+            <div>작성자: 김개발</div>
+            <div>MIME: application/pdf</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);padding:4px 0;margin:10px 0 6px;">상태</div>
+            <div>잠금: <span style="color:var(--warn);">김개발</span></div>
+            <div>공유: team_design</div>
+            <div>승인: 대기중</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);padding:4px 0;margin:10px 0 6px;">태그</div>
+            <div><span class="chip tag">중요</span><span class="chip tag">사양서</span></div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);padding:4px 0;margin:10px 0 6px;">빠른 이동</div>
+            <div style="color:var(--navy);font-weight:600;">▸ 미리보기</div>
+            <div>▸ 커밋 이력</div>
+            <div>▸ Diff</div>
+            <div>▸ 승인</div>
+            <div>▸ 태그</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>5탭이 상단 탭바로 나열 — 탭 수가 많아 모바일/좁은 화면에서 어떻게 처리할지 미정</li>
+          <li>Diff 탭은 Inline / Side-by-side 토글 제공, 바이너리는 "다운로드하여 비교" 안내</li>
+          <li>커밋이력 테이블은 이전 리비전으로 "복원" 버튼 (맨 위 리비전은 제외)</li>
+          <li>우측 메타패널의 "빠른 이동"이 탭 바와 기능 중복 — 통합 여부 검토 필요</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                 6. 공유 관리                        -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="shares">
+      <h2>6. 공유 관리<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>SharesPageV2.tsx</code> · 3탭 (공유받은/내가 공유/대기중) + 테이블 + 우측 상세패널 280px
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">공유받은 문서</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="padding:16px;overflow-y:auto;">
+            <h2 class="pg-title" style="padding:0;margin-bottom:12px;">공유 관리</h2>
+            <div class="tab-bar" style="padding:0;">
+              <span class="active">공유받은 (12)</span>
+              <span>내가 공유 (5)</span>
+              <span>대기중 (2)</span>
+            </div>
+            <div class="mini-card" style="padding:0;overflow:hidden;">
+              <table class="mini-table">
+                <thead><tr><th>파일명</th><th>공유자</th><th>유형</th><th>권한</th><th>상태</th><th style="width:80px;">작업</th></tr></thead>
+                <tbody>
+                  <tr class="selected"><td>📄 사양서_v3.docx</td><td>김개발</td><td><span class="chip tag">사용자</span></td><td>읽기+다운</td><td><span class="chip share">활성</span></td><td>👁 ⬇</td></tr>
+                  <tr><td>📄 회의록.md</td><td>이디자</td><td><span class="chip tag">그룹</span></td><td>읽기</td><td><span class="chip share">활성</span></td><td>👁</td></tr>
+                  <tr><td>📄 계약서.pdf</td><td>박법무</td><td><span class="chip tag">링크</span></td><td>읽기+다운</td><td><span class="chip share">활성</span></td><td>👁 ⬇</td></tr>
+                  <tr><td>📄 정책.docx</td><td>정대표</td><td><span class="chip tag">이메일</span></td><td>읽기</td><td><span class="chip" style="background:#f3f4f6;">대기</span></td><td>-</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="margin-top:8px;color:var(--muted);font-size:10px;text-align:center;">(내가 공유 탭에서는 행 클릭 시 인라인 권한 수정 패널 펼침)</div>
+          </div>
+          <!-- 우측 상세 패널 280px -->
+          <div class="right-mini" style="width:280px;">
+            <div style="display:flex;justify-content:space-between;font-weight:700;font-size:12px;margin-bottom:10px;">사양서_v3.docx <span style="color:var(--muted);">✕</span></div>
+            <div style="font-size:10px;color:var(--muted);">경로</div>
+            <div>/projects/사양서_v3.docx</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">유형</div><div>사용자</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">권한</div><div>읽기, 다운로드</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">공유자</div><div>김개발</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">만료일</div><div>2026-05-20</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin:12px 0 6px;">액션</div>
+            <div class="btn-mock ghost" style="display:block;text-align:left;margin-bottom:4px;font-size:10px;">미리보기</div>
+            <div class="btn-mock ghost" style="display:block;text-align:left;margin-bottom:4px;font-size:10px;">폴더에서 열기</div>
+            <div class="btn-mock" style="display:block;text-align:center;font-size:10px;">다운로드</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>탭별로 우측 패널 액션이 달라짐 (받은: 미리보기/다운로드, 내가공유: 링크복사/삭제, 대기: 수락/거절)</li>
+          <li>"내가 공유" 탭에서 수정 버튼 클릭 시 행 아래 인라인 권한 수정 행이 펼쳐짐 (새 모달 X)</li>
+          <li>아무것도 선택 안 된 우측 패널에는 공유 통계 (받은/내가공유/대기 카운트)가 표시됨</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                 7. 문서 승인                        -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="approvals">
+      <h2>7. 문서 승인<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>ApprovalsPageV2.tsx</code> · 3탭 (검토대기/내가 요청/완료) + 카드 목록 + 우측 통계 260px
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;"></span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="padding:16px;overflow-y:auto;">
+            <h2 class="pg-title" style="padding:0;margin-bottom:12px;">문서 승인</h2>
+            <div class="tab-bar" style="padding:0;">
+              <span class="active">검토 대기 (3)</span>
+              <span>내가 요청</span>
+              <span>완료</span>
+            </div>
+            <!-- 승인 카드 -->
+            <div class="mini-card left-bd warn">
+              <div style="display:flex;align-items:center;gap:6px;font-weight:600;">
+                📄 사양서_v3.docx (r.140)
+                <span class="chip" style="background:var(--warn-bg);color:var(--warn);">대기중</span>
+              </div>
+              <div style="font-size:10px;color:var(--muted);margin-top:4px;">요청자: 김개발 · 2시간 전 · 정책: 전원 승인</div>
+              <div style="margin-top:6px;">
+                <span class="chip tag" style="background:var(--green-bg);color:var(--green);">이디자 ✓</span>
+                <span class="chip tag">박법무</span>
+                <span class="chip tag">정대표</span>
+              </div>
+              <div style="margin-top:10px;">
+                <span class="btn-mock" style="background:var(--green);padding:4px 10px;">✓ 승인</span>
+                <span class="btn-mock danger" style="padding:4px 10px;">✗ 반려</span>
+              </div>
+            </div>
+            <div class="mini-card left-bd green">
+              <div style="display:flex;align-items:center;gap:6px;font-weight:600;">
+                📄 정책v2.pdf (r.25) <span class="chip" style="background:var(--green-bg);color:var(--green);">승인완료</span>
+              </div>
+              <div style="font-size:10px;color:var(--muted);margin-top:4px;">요청자: 정대표 · 어제 · 정책: 1인 이상</div>
+            </div>
+          </div>
+          <!-- 우측 통계 260px -->
+          <div class="right-mini" style="width:260px;">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">승인 통계</div>
+            <div style="display:flex;justify-content:space-between;"><span>전체</span><strong>15</strong></div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin:14px 0 6px;">자동 승인 규칙</div>
+            <div style="color:var(--muted);font-size:10px;">관리자가 설정한 경로 패턴에 따라 자동 승인됩니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>카드 좌측 4px 컬러 보더로 상태 구분 (주황=대기/초록=승인/빨강=반려/회색=취소)</li>
+          <li>검토자 목록을 칩으로 표시 + 각 검토자 상태 아이콘 (✓/✗/대기)</li>
+          <li>반려 시 사유를 prompt()로 입력 받음 — 나중에 모달로 바꿀 것</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                 8. 즐겨찾기                         -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="bookmarks">
+      <h2>8. 즐겨찾기<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>BookmarksPageV2.tsx</code> · 단순 카드 리스트 (우측 패널 없음)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">즐겨찾기</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="padding:16px;overflow-y:auto;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+              <span style="font-size:18px;color:#f5b041;">★</span>
+              <h2 style="margin:0;font-size:16px;font-weight:700;">즐겨찾기</h2>
+              <span style="color:var(--muted);font-size:11px;">(8개)</span>
+            </div>
+            <div class="mini-card" style="padding:0;">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f0f0f0;">
+                <div>📄</div>
+                <div style="flex:1;">
+                  <div style="font-weight:500;">사양서_v3.docx</div>
+                  <div style="color:var(--muted);font-size:10px;">/projects/2026-Q1/사양서_v3.docx</div>
+                </div>
+                <div style="color:var(--muted);font-size:10px;">어제</div>
+                <div style="color:var(--danger);">🗑</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f0f0f0;">
+                <div>📄</div>
+                <div style="flex:1;"><div style="font-weight:500;">회의록_2026-04.md</div><div style="color:var(--muted);font-size:10px;">/meetings/weekly/회의록_2026-04.md</div></div>
+                <div style="color:var(--muted);font-size:10px;">3일 전</div><div></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f0f0f0;">
+                <div>📁</div>
+                <div style="flex:1;"><div style="font-weight:500;">중요자료/</div><div style="color:var(--muted);font-size:10px;">/docs/중요자료</div></div>
+                <div style="color:var(--muted);font-size:10px;">1주 전</div><div></div>
+              </div>
+              <div style="padding:10px 16px;color:var(--muted);font-size:10px;text-align:center;">(추가 항목 …)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>호버 시에만 삭제(🗑) 아이콘 노출</li>
+          <li>클릭 시 해당 저장소의 폴더로 이동 (파일 상세가 아닌 목록)</li>
+          <li>모든 저장소의 북마크를 한 리스트에 섞어 표시 — 저장소별 그룹핑이 필요한지 논의</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                   9. 태그                          -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="tags">
+      <h2>9. 태그<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>TagsPageV2.tsx</code> · 좌측 태그 목록 280px + 우측 태그별 파일 목록 (2단 분할)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">태그</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="display:flex;">
+            <!-- 좌측 태그 목록 -->
+            <div style="width:260px;border-right:1px solid var(--border);flex-shrink:0;">
+              <div style="padding:12px 14px;display:flex;justify-content:space-between;border-bottom:1px solid var(--border);">
+                <strong style="font-size:12px;">🏷 태그</strong>
+                <span class="btn-mock" style="padding:2px 8px;font-size:10px;">+ 새 태그</span>
+              </div>
+              <div style="padding:12px 14px;border-bottom:1px solid var(--border);background:#fafbfc;">
+                <div class="input-mock" style="padding:4px 8px;font-size:10px;margin-bottom:6px;">태그 이름</div>
+                <div style="display:flex;gap:4px;">
+                  <div style="width:22px;height:22px;border-radius:4px;background:#3B82F6;"></div>
+                  <select style="flex:1;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;" disabled><option>개인 태그</option></select>
+                </div>
+              </div>
+              <div style="padding:8px 14px;display:flex;align-items:center;gap:6px;background:var(--accent-bg);">
+                <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;"></div>
+                <span style="flex:1;font-size:12px;">중요</span>
+                <span style="font-size:9px;color:var(--muted);">시스템</span>
+              </div>
+              <div style="padding:8px 14px;display:flex;align-items:center;gap:6px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#3B82F6;"></div>
+                <span style="flex:1;font-size:12px;">프로젝트</span>
+                <span style="font-size:9px;color:var(--muted);">개인</span>
+              </div>
+              <div style="padding:8px 14px;display:flex;align-items:center;gap:6px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#10b981;"></div>
+                <span style="flex:1;font-size:12px;">검토완료</span>
+                <span style="font-size:9px;color:var(--muted);">시스템</span>
+              </div>
+            </div>
+            <!-- 우측 파일 목록 -->
+            <div style="flex:1;padding:16px;overflow-y:auto;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                <div style="width:14px;height:14px;border-radius:50%;background:#ef4444;"></div>
+                <h3 style="margin:0;font-size:16px;">중요</h3>
+                <span style="color:var(--muted);font-size:11px;">(7개 파일)</span>
+              </div>
+              <div class="mini-card" style="padding:0;">
+                <div style="padding:10px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:10px;">📄 <div style="flex:1;"><div>사양서_v3.docx</div><div style="color:var(--muted);font-size:10px;">/projects/사양서_v3.docx</div></div><span style="color:var(--muted);font-size:10px;">어제</span></div>
+                <div style="padding:10px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:10px;">📄 <div style="flex:1;"><div>계약서.pdf</div><div style="color:var(--muted);font-size:10px;">/contracts/계약서.pdf</div></div><span style="color:var(--muted);font-size:10px;">3일 전</span></div>
+                <div style="padding:10px 16px;color:var(--muted);font-size:10px;text-align:center;">(추가 …)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>태그 생성 폼이 좌측 헤더 아래 인라인 펼침 — 모달 X</li>
+          <li>scope가 "시스템/개인" 두 종류 (관리자가 만드는 시스템 태그 vs 사용자별 개인 태그)</li>
+          <li>우측 파일 목록은 태그 선택 전에는 빈 상태 안내 ("왼쪽에서 태그를 선택하세요")</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                  10. 휴지통                        -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="trash">
+      <h2>10. 휴지통<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>TrashPageV2.tsx</code> · 저장소 선택 + 보관기간 표시 + 테이블 (복원/영구삭제)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">휴지통</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="padding:16px;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;gap:8px;"><span>🗑</span><h2 style="margin:0;font-size:16px;">휴지통</h2></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:11px;color:var(--muted);">저장소:</span>
+                <select style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;" disabled><option>user_hong</option></select>
+                <span class="chip" style="background:var(--warn-bg);color:var(--warn);">보관기간: 30일</span>
+              </div>
+            </div>
+            <div class="mini-card" style="padding:0;overflow:hidden;">
+              <table class="mini-table">
+                <thead><tr><th>파일명</th><th>원래 경로</th><th>삭제자</th><th>삭제일</th><th>만료일</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td>📄 구버전.docx</td><td>/projects/구버전.docx</td><td>홍길동</td><td>어제</td><td style="color:var(--warn);">2026-05-21</td><td><span class="btn-mock" style="padding:2px 8px;">← 복원</span> <span class="btn-mock ghost" style="padding:2px 8px;color:var(--danger);border-color:var(--danger);">영구삭제</span></td></tr>
+                  <tr><td>📄 폐기계약.pdf</td><td>/contracts/폐기계약.pdf</td><td>박법무</td><td>3일 전</td><td style="color:var(--warn);">2026-05-19</td><td><span class="btn-mock" style="padding:2px 8px;">← 복원</span> <span class="btn-mock ghost" style="padding:2px 8px;color:var(--danger);border-color:var(--danger);">영구삭제</span></td></tr>
+                  <tr><td>📄 임시.md</td><td>/tmp/임시.md</td><td>홍길동</td><td>1주 전</td><td style="color:var(--muted);">영구</td><td><span class="btn-mock" style="padding:2px 8px;">← 복원</span> <span class="btn-mock ghost" style="padding:2px 8px;color:var(--danger);border-color:var(--danger);">영구삭제</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>저장소별 보관기간은 관리자 설정값 (0일 = 영구 보존)</li>
+          <li>영구삭제는 confirm() 다이얼로그로 한 번 확인 — 모달로 교체 고려</li>
+          <li>저장소를 사용자가 선택해야 함 (자동 선택 X) — 여러 저장소 동시 조회 UX는 없음</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                  11. 내 활동                       -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="activity">
+      <h2>11. 내 활동<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>ActivityPageV2.tsx</code> · 타임라인 (최대 100건, max-width 720px)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;"></span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini">
+            <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+              <span>📊</span><h2 style="margin:0;font-size:16px;">내 활동</h2>
+            </div>
+            <div style="padding:20px;max-width:720px;">
+              <div style="display:flex;gap:12px;padding:10px 14px;border-radius:6px;">
+                <div style="width:32px;height:32px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;">📄</div>
+                <div style="flex:1;">
+                  <div><strong>파일 업로드</strong> <span style="color:var(--muted);">-- /projects/사양서_v3.docx</span></div>
+                  <div style="color:var(--muted);font-size:10px;">새 버전 커밋</div>
+                  <div style="color:var(--muted);font-size:10px;">🕐 2분 전 · 192.168.1.10</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:12px;padding:10px 14px;">
+                <div style="width:32px;height:32px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;">↗</div>
+                <div style="flex:1;"><div><strong>공유 생성</strong> <span style="color:var(--muted);">-- /specs/api.md</span></div><div style="color:var(--muted);font-size:10px;">🕐 15분 전</div></div>
+              </div>
+              <div style="display:flex;gap:12px;padding:10px 14px;">
+                <div style="width:32px;height:32px;border-radius:50%;background:var(--warn-bg);display:flex;align-items:center;justify-content:center;">🔒</div>
+                <div style="flex:1;"><div><strong>파일 잠금</strong> <span style="color:var(--muted);">-- /design/wireframe.fig</span></div><div style="color:var(--muted);font-size:10px;">🕐 1시간 전</div></div>
+              </div>
+              <div style="color:var(--muted);font-size:10px;text-align:center;padding:16px;">(최대 100건 표시 …)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>필터/검색 없음 — 단순 최신순 100건. 많은 활동 추적이 필요할 때는 관리자 활동 로그로 이동</li>
+          <li>아이콘 원형 컬러가 카테고리별로 다름 (파일=파랑, 공유=초록, 잠금=주황, 사용자=보라)</li>
+          <li>IP 주소 노출 — 개인정보 고려 필요 여부 (본인 기록이므로 괜찮아 보임)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--                  12. 알림                          -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="notifications">
+      <h2>12. 알림<span class="mode-badge user">사용자 셸</span></h2>
+      <div class="meta">
+        <code>NotificationsPageV2.tsx</code> · 전체 목록 + "모두 읽음" 버튼 (최대 50건 페이지당)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">알림</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>홍길동 ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini">사이드바<br>(축약)</div>
+          <div class="main-mini" style="padding:16px;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+              <h2 style="margin:0;font-size:16px;">알림</h2>
+              <span class="btn-mock ghost" style="padding:4px 12px;">모두 읽음</span>
+            </div>
+            <div class="mini-card" style="padding:0;overflow:hidden;">
+              <div style="padding:12px 16px;background:var(--accent-bg);display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid #f0f0f0;">
+                <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;">↗</div>
+                <div style="flex:1;">
+                  <div style="font-weight:700;">김개발님이 문서를 공유했습니다</div>
+                  <div style="color:var(--muted);font-size:10px;">/projects/사양서_v3.docx</div>
+                  <div style="color:var(--muted);font-size:10px;margin-top:2px;">2분 전</div>
+                </div>
+                <div style="width:6px;height:6px;border-radius:50%;background:var(--accent);margin-top:6px;"></div>
+              </div>
+              <div style="padding:12px 16px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid #f0f0f0;">
+                <div style="width:28px;height:28px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;">✓</div>
+                <div style="flex:1;"><div>승인 요청이 완료되었습니다</div><div style="color:var(--muted);font-size:10px;">정책v2.pdf</div><div style="color:var(--muted);font-size:10px;margin-top:2px;">1시간 전</div></div>
+              </div>
+              <div style="padding:12px 16px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid #f0f0f0;">
+                <div style="width:28px;height:28px;border-radius:50%;background:var(--warn-bg);display:flex;align-items:center;justify-content:center;">🔒</div>
+                <div style="flex:1;"><div>파일이 30분째 잠겨 있습니다</div><div style="color:var(--muted);font-size:10px;">wireframe.fig (이디자)</div><div style="color:var(--muted);font-size:10px;margin-top:2px;">3시간 전</div></div>
+              </div>
+              <div style="padding:12px 16px;color:var(--muted);font-size:10px;text-align:center;">(최대 50건)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>미읽음은 배경이 파란색 틴트(var(--accent-bg)) + 오른쪽 파란 점</li>
+          <li>타입 4종: share/approval/lock/system — 각기 다른 아이콘·컬러</li>
+          <li>클릭 시 읽음 처리되지만 해당 대상(파일/공유)으로 이동하지는 않음 — 네비게이션 연결 논의 필요</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--               13. 비밀번호 변경                      -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="password">
+      <h2>13. 비밀번호 변경<span class="mode-badge standalone">셸 없음</span></h2>
+      <div class="meta">
+        <code>PasswordChangePageV2.tsx</code> · 로그인 후 강제 변경 또는 내 설정에서 수동 변경
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">독립 화면 (중앙 카드 420px)</div>
+        <div class="login-frame">
+          <div class="login-card" style="width:420px;">
+            <h1 style="font-size:16px;color:var(--label-strong);text-align:center;margin:0 0 4px;">비밀번호 변경</h1>
+            <p style="text-align:center;font-size:12px;color:var(--label);margin:0 0 24px;">홍길동님, 첫 로그인 시 비밀번호를 변경해야 합니다.</p>
+            <label style="font-size:11px;color:var(--label);display:block;margin-bottom:4px;">현재 비밀번호</label>
+            <div class="input-mock"></div>
+            <label style="font-size:11px;color:var(--label);display:block;margin-bottom:4px;">새 비밀번호</label>
+            <div class="input-mock"></div>
+            <label style="font-size:11px;color:var(--label);display:block;margin-bottom:4px;">새 비밀번호 확인</label>
+            <div class="input-mock"></div>
+            <div style="font-size:11px;color:var(--muted);margin:4px 0 20px;">8자 이상, 대문자 + 숫자 포함</div>
+            <div class="submit">비밀번호 변경</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>로그인 후 <code>passwordChangeRequired</code> 플래그가 true면 강제로 이 화면 진입 (bypass 불가)</li>
+          <li>성공 시 "강제 변경"이면 /로 이동, "자발적 변경"이면 1.5초 후 로그아웃 → 재로그인 요구</li>
+          <li>정책 검증: 8자 + 대문자 + 숫자 — 서버에서도 동일 정책 적용 필요</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--              14. 공개 링크                          -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="public-link">
+      <h2>14. 공개 링크 (비로그인 접근)<span class="mode-badge standalone">셸 없음</span></h2>
+      <div class="meta">
+        <code>PublicLinkPageV2.tsx</code> · URL <code>/s/{token}</code> · 3가지 상태 (비밀번호 요구 / 파일정보 / 에러)
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">상태 1 — 파일 정보 (공개 링크 유효)</div>
+        <div style="background:var(--bg);padding:0;">
+          <!-- 상단 로고바 -->
+          <div style="padding:12px 24px;background:#fff;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <strong style="color:var(--navy);">VaultLine</strong>
+            <span style="color:var(--muted);">↗</span>
+          </div>
+          <div style="padding:40px 16px;display:flex;justify-content:center;">
+            <div style="background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.06);padding:32px;width:520px;text-align:center;">
+              <div style="width:56px;height:56px;border-radius:50%;background:#f5f5f5;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;"><span style="font-size:24px;color:var(--danger);">📄</span></div>
+              <div style="font-size:14px;font-weight:600;">공개계약서.pdf</div>
+              <div style="font-size:11px;color:var(--label);margin-top:4px;">/contracts/공개계약서.pdf</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:4px;">공유자: 박법무 · 2.1 MB</div>
+              <div style="margin-top:20px;">
+                <span class="btn-mock ghost">미리보기</span>
+                <span class="btn-mock">다운로드</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">상태 2 — 비밀번호 필요</div>
+        <div class="login-frame">
+          <div class="login-card" style="text-align:center;">
+            <div style="width:56px;height:56px;border-radius:50%;background:var(--warn-bg);display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;color:var(--warn);font-size:20px;">🔒</div>
+            <h1 style="font-size:16px;margin:0 0 6px;">비밀번호 필요</h1>
+            <p style="font-size:12px;color:var(--label);margin:0 0 20px;">이 공유 링크는 비밀번호로 보호되어 있습니다.</p>
+            <div class="input-mock" style="margin-bottom:12px;">비밀번호 입력</div>
+            <div class="submit">확인</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wf">
+        <div class="wf-label">상태 3 — 만료/잘못된 링크</div>
+        <div class="login-frame" style="padding:80px 0;">
+          <div style="text-align:center;">
+            <div style="width:64px;height:64px;border-radius:50%;background:#f5f5f5;display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;color:var(--muted);font-size:24px;">🔗</div>
+            <div style="font-size:16px;font-weight:600;">링크를 찾을 수 없습니다</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">만료되었거나 잘못된 링크입니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>비로그인 상태에서도 접근 가능 — 셸(헤더/사이드바) 없음, VaultLine 로고 바만 상단에 표시</li>
+          <li>권한에 따라 "미리보기 닫기/열기" 토글 + 다운로드 버튼 노출 여부 달라짐</li>
+          <li>미리보기 유형별 분기: 이미지(직접) / PDF(iframe) / 텍스트(pre) / 기타(다운로드 유도)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--              15. 관리자: 사용자 관리                 -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-users">
+      <h2>15. 사용자 관리<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminUsersV2.tsx</code> · 마스터(테이블) + 디테일/생성 우측 패널 360px
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="display:flex;flex-direction:column;">
+            <!-- 상단 바 -->
+            <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff;">
+              <h2 style="margin:0;flex:1;font-size:16px;">사용자 관리</h2>
+              <div class="input-mock" style="width:160px;padding:4px 10px;font-size:11px;margin:0;">검색...</div>
+              <span class="btn-mock">사용자 추가</span>
+              <span class="btn-mock ghost">CSV 가져오기</span>
+            </div>
+            <!-- 테이블 -->
+            <div style="flex:1;overflow-y:auto;">
+              <table class="mini-table">
+                <thead><tr><th>ID</th><th>이름</th><th>이메일</th><th>역할</th><th>그룹</th><th>쿼터</th><th>상태</th></tr></thead>
+                <tbody>
+                  <tr class="selected"><td>1</td><td><strong>홍길동</strong> <span style="color:var(--muted);font-size:9px;">@hong</span></td><td>hong@co.kr</td><td><span class="chip tag" style="background:var(--blueBg,#E3F2FD);color:var(--accent);">사용자</span></td><td>dev</td><td style="font-size:10px;"><div style="display:inline-block;width:40px;height:4px;background:#eee;border-radius:2px;"><div style="width:35%;height:100%;background:var(--accent);border-radius:2px;"></div></div> 3.5/10GB</td><td><span class="chip share">활성</span></td></tr>
+                  <tr><td>2</td><td><strong>김개발</strong> <span style="color:var(--muted);font-size:9px;">@kim</span></td><td>kim@co.kr</td><td><span class="chip tag" style="background:#EDE7F6;color:#6A1B9A;">관리자</span></td><td>dev, admin</td><td style="font-size:10px;">5.2/10GB</td><td><span class="chip share">활성</span></td></tr>
+                  <tr><td>3</td><td><strong>이디자</strong> <span style="color:var(--muted);font-size:9px;">@lee</span></td><td>-</td><td><span class="chip tag">사용자</span></td><td>design</td><td style="font-size:10px;color:var(--danger);">9.5/10GB</td><td><span class="chip lock">잠김</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- 하단 통계 -->
+            <div style="padding:8px 20px;border-top:1px solid var(--border);background:#fff;font-size:11px;color:var(--label);display:flex;gap:16px;">
+              <span>전체 42명</span><span>활성 38명</span><span>잠김 1명</span>
+            </div>
+          </div>
+          <!-- 우측 상세 패널 360px -->
+          <div class="right-mini" style="width:320px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;font-weight:700;font-size:12px;margin-bottom:14px;">사용자 상세 <span style="color:var(--muted);">✕</span></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+              <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1B2A4A,#1565C0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">홍</div>
+              <div><div style="font-weight:700;">홍길동</div><div style="color:var(--muted);font-size:10px;">@hong</div></div>
+            </div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">기본 정보</div>
+            <div style="display:flex;justify-content:space-between;"><span>이메일</span><span>hong@co.kr</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>역할</span><span>사용자</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>그룹</span><span>dev</span></div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin:10px 0 4px;">쿼터</div>
+            <div style="font-size:10px;">3.5 GB / 10 GB · 35%</div>
+            <div style="height:6px;background:#eee;border-radius:3px;margin-top:2px;"><div style="width:35%;height:100%;background:var(--accent);border-radius:3px;"></div></div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin:10px 0 4px;">계정 상태</div>
+            <div style="display:flex;justify-content:space-between;"><span>상태</span><span style="color:var(--green);font-weight:600;">활성</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>로그인 실패</span><span>0회</span></div>
+            <div class="btn-mock" style="display:block;text-align:center;margin-top:12px;">비밀번호 초기화</div>
+            <div class="btn-mock ghost" style="display:block;text-align:center;margin-top:6px;font-size:10px;">모든 세션 종료</div>
+            <div style="border:1px solid var(--danger);border-radius:6px;padding:10px;margin-top:12px;">
+              <div style="color:var(--danger);font-size:10px;font-weight:700;margin-bottom:6px;">⚠ 위험 영역</div>
+              <div style="display:flex;gap:4px;">
+                <span class="btn-mock ghost" style="flex:1;text-align:center;padding:4px;font-size:10px;color:var(--warn);border-color:var(--warn);">비활성화</span>
+                <span class="btn-mock ghost" style="flex:1;text-align:center;padding:4px;font-size:10px;color:var(--danger);border-color:var(--danger);">삭제</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>마스터-디테일 패턴 — 우측 패널은 행 클릭으로 열리고 ✕/별행 클릭으로 닫힘</li>
+          <li>"사용자 추가" 버튼은 생성 폼 패널을 우측에 열기 (별도 모달 X)</li>
+          <li>상태 칩은 3가지: 활성(초록)/비활성(회색)/잠김(빨강)</li>
+          <li>쿼터 초과 사용자는 테이블에서 빨간 숫자 + 우측 쿼터 바 빨강</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--              16. 관리자: 그룹 관리                  -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-groups">
+      <h2>16. 그룹 관리<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminGroupsV2.tsx</code> · 그룹 테이블 + 우측 패널 (멤버 관리, 생성 폼)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="display:flex;flex-direction:column;">
+            <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff;">
+              <span>👥</span><h2 style="margin:0;flex:1;font-size:16px;">그룹 관리</h2>
+              <span class="btn-mock">+ 그룹 추가</span>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:16px;">
+              <div class="mini-card" style="padding:0;">
+                <table class="mini-table">
+                  <thead><tr><th>그룹명</th><th>표시이름</th><th>멤버</th><th>팀 저장소</th><th>생성일</th></tr></thead>
+                  <tbody>
+                    <tr class="selected"><td><strong>dev</strong></td><td>개발팀</td><td>8명</td><td style="color:var(--muted);font-size:10px;">team_dev</td><td style="color:var(--muted);font-size:10px;">2025-06-01</td></tr>
+                    <tr><td><strong>design</strong></td><td>디자인팀</td><td>4명</td><td style="color:var(--muted);font-size:10px;">team_design</td><td style="color:var(--muted);font-size:10px;">2025-06-01</td></tr>
+                    <tr><td><strong>legal</strong></td><td>법무팀</td><td>2명</td><td style="color:var(--muted);font-size:10px;">-</td><td style="color:var(--muted);font-size:10px;">2025-09-15</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="right-mini" style="width:320px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;font-weight:700;font-size:12px;margin-bottom:14px;">개발팀 <span style="color:var(--muted);">✕</span></div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">그룹 정보</div>
+            <div style="display:flex;justify-content:space-between;"><span>그룹명</span><span>dev</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>표시이름</span><span>개발팀</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>설명</span><span>백엔드·프론트</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>팀 저장소</span><span>team_dev</span></div>
+            <div style="display:flex;gap:4px;margin:10px 0;">
+              <span class="btn-mock ghost" style="flex:1;text-align:center;padding:5px;">수정</span>
+              <span class="btn-mock ghost" style="flex:1;text-align:center;padding:5px;color:var(--danger);border-color:var(--danger);">삭제</span>
+            </div>
+            <div style="font-size:11px;font-weight:600;margin-bottom:6px;">멤버 (8명)</div>
+            <div style="padding:6px 8px;border-radius:4px;display:flex;justify-content:space-between;">홍길동 <span style="color:var(--muted);font-size:10px;">@hong</span><span style="color:var(--danger);font-size:10px;">제거</span></div>
+            <div style="padding:6px 8px;border-radius:4px;display:flex;justify-content:space-between;">김개발 <span style="color:var(--muted);font-size:10px;">@kim</span><span style="color:var(--danger);font-size:10px;">제거</span></div>
+            <div style="font-size:11px;font-weight:600;margin:10px 0 4px;">멤버 추가</div>
+            <div class="input-mock" style="padding:5px 10px;font-size:10px;">사용자 검색...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>생성 시 "팀 저장소 자동 생성" 체크박스 옵션 — 체크하면 <code>team_{group_name}</code> SVN 저장소 자동 생성</li>
+          <li>멤버 추가는 검색어 입력 → 후보 드롭다운에서 클릭 (검색 결과에서 즉시 추가)</li>
+          <li>수정 모드에서는 display_name/description만 수정 가능 (name은 불변)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             17. 관리자: 저장소 관리                 -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-repos">
+      <h2>17. 저장소 관리<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminReposV2.tsx</code> · 저장소 테이블 + 우측 상세/생성 패널 360px
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="display:flex;flex-direction:column;">
+            <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;background:#fff;">
+              <span>🗄</span><h2 style="margin:0;flex:1;font-size:16px;">저장소 관리</h2>
+              <span class="btn-mock">저장소 추가</span>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:16px;">
+              <div class="mini-card" style="padding:0;">
+                <table class="mini-table">
+                  <thead><tr><th>저장소명</th><th>유형</th><th>상태</th><th>사용량</th><th>쿼터</th><th>생성일</th></tr></thead>
+                  <tbody>
+                    <tr class="selected"><td><strong>user_hong</strong> <span style="color:var(--muted);font-size:9px;">(user_hong)</span></td><td><span class="chip tag" style="background:var(--accent-bg);color:var(--accent);">개인</span></td><td>🟢</td><td style="color:var(--label);font-size:10px;">3.5 GB</td><td style="font-size:10px;">35%</td><td style="color:var(--muted);font-size:10px;">2025-06</td></tr>
+                    <tr><td><strong>team_dev</strong> <span style="color:var(--muted);font-size:9px;">(team_dev)</span></td><td><span class="chip tag" style="background:var(--green-bg);color:var(--green);">팀</span></td><td>🟢</td><td style="font-size:10px;">28.1 GB</td><td style="font-size:10px;color:var(--danger);">88%</td><td style="color:var(--muted);font-size:10px;">2025-06</td></tr>
+                    <tr><td><strong>team_design</strong></td><td><span class="chip tag" style="background:var(--green-bg);color:var(--green);">팀</span></td><td>🟡</td><td style="font-size:10px;">12 GB</td><td style="color:var(--muted);font-size:10px;">무제한</td><td style="color:var(--muted);font-size:10px;">2025-08</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="right-mini" style="width:320px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;font-weight:700;font-size:12px;margin-bottom:12px;">저장소 상세 <span style="color:var(--muted);">✕</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>저장소명</span><span>user_hong</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>표시이름</span><span>내 공간</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>유형</span><span>개인</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>상태</span><span style="color:var(--green);">활성</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>소유자</span><span>홍길동</span></div>
+            <div style="margin:12px 0;">
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;"><span>사용량</span><span>3.5 GB / 10 GB</span></div>
+              <div style="height:8px;background:#eee;border-radius:4px;"><div style="width:35%;height:100%;background:var(--accent);border-radius:4px;"></div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;"><span>생성일</span><span>2025-06-01</span></div>
+            <div class="btn-mock ghost" style="display:block;text-align:center;margin-top:14px;">수정</div>
+            <div class="btn-mock ghost" style="display:block;text-align:center;margin-top:6px;color:var(--danger);border-color:var(--danger);">삭제 (30일 유예)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>삭제는 즉시 삭제가 아닌 <strong>30일 pending_deletion</strong> 상태 — 상태 컬럼에 주황 점으로 표시</li>
+          <li>생성 시 유형(개인/팀) 선택 → 팀은 <strong>소속 그룹</strong> 필수, 개인은 소유자 필수</li>
+          <li>쿼터 0 = 무제한 — 사용량 퍼센트 대신 "무제한" 텍스트</li>
+          <li>소유자 변경은 검색 자동완성 드롭다운으로</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             18. 관리자: 시스템 설정                 -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-settings">
+      <h2>18. 시스템 설정<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminSettingsV2.tsx</code> · 카테고리별 아코디언 카드 (일반/보안/파일/휴지통/알림) + 하단 변경사항 바
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="padding:20px;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+              <div><h2 style="margin:0;font-size:16px;display:flex;align-items:center;gap:6px;">⚙ 시스템 설정</h2><div style="font-size:10px;color:var(--muted);">DB 저장 설정 (환경변수 &gt; config &gt; DB 우선순위)</div></div>
+              <span class="btn-mock">변경사항 저장 (2)</span>
+            </div>
+            <div class="mini-card" style="padding:0;margin-bottom:12px;">
+              <div style="background:#fafbfc;padding:10px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:12px;">일반</div>
+              <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:14px;">
+                <div style="width:200px;"><div>사이트 이름</div><div style="font-size:9px;color:var(--muted);font-family:monospace;">site_name</div></div>
+                <div class="input-mock" style="width:200px;padding:5px 10px;font-size:11px;margin:0;">VaultLine</div>
+              </div>
+              <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:14px;background:#FFF8E1;">
+                <div style="width:200px;"><div>로고 URL</div><div style="font-size:9px;color:var(--muted);font-family:monospace;">logo_url</div></div>
+                <div class="input-mock" style="width:200px;padding:5px 10px;font-size:11px;margin:0;border-color:#FFB300;">https://...</div>
+                <span style="color:var(--warn);font-size:10px;font-weight:600;">수정됨</span>
+              </div>
+            </div>
+            <div class="mini-card" style="padding:0;margin-bottom:12px;">
+              <div style="background:#fafbfc;padding:10px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:12px;">보안</div>
+              <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:14px;">
+                <div style="width:200px;"><div>로그인 잠금 횟수</div><div style="font-size:9px;color:var(--muted);font-family:monospace;">max_login_attempts</div></div>
+                <div class="input-mock" style="width:80px;padding:5px 10px;font-size:11px;margin:0;">5</div>
+              </div>
+              <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:14px;background:#FFF8E1;">
+                <div style="width:200px;"><div>2FA 필수</div><div style="font-size:9px;color:var(--muted);font-family:monospace;">require_2fa</div></div>
+                <div><span class="toggle-mock"></span></div>
+                <span style="color:var(--warn);font-size:10px;font-weight:600;">수정됨</span>
+              </div>
+            </div>
+            <div class="mini-card" style="padding:0;margin-bottom:12px;">
+              <div style="background:#fafbfc;padding:10px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:12px;">파일 및 쿼터</div>
+              <div style="padding:12px 16px;color:var(--muted);font-size:11px;">· 업로드 최대 크기, 기본 쿼터 등 …</div>
+            </div>
+            <div class="mini-card" style="padding:0;margin-bottom:12px;">
+              <div style="background:#fafbfc;padding:10px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:12px;">휴지통 / 알림</div>
+              <div style="padding:12px 16px;color:var(--muted);font-size:11px;">· 보관기간, 이메일 알림 on/off 등 …</div>
+            </div>
+            <!-- 하단 변경사항 바 -->
+            <div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:var(--warn);font-size:12px;">2개 항목이 수정되었습니다.</span>
+              <div><span class="btn-mock ghost" style="padding:4px 12px;">초기화</span> <span class="btn-mock" style="padding:4px 12px;">저장</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>수정된 설정 행은 배경이 노란색(#FFF8E1) + "수정됨" 뱃지로 강조</li>
+          <li>입력 타입별 컴포넌트 분기: text / number / toggle</li>
+          <li>상단 우측 "변경사항 저장 (N)" + 하단 고정 변경사항 바 — 중복 저장 UX</li>
+          <li>설정 키는 모노스페이스로 노출 (개발자 친화) — 실사용자(관리자)에게 필요한지 논의</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             19. 관리자: 시스템 정보                 -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-system">
+      <h2>19. 시스템 정보<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminSystemV2.tsx</code> · 읽기 전용 상태 대시보드 (30초 폴링)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="padding:20px;overflow-y:auto;">
+            <h2 style="margin:0 0 16px;font-size:16px;">🛡 시스템 정보</h2>
+
+            <h3 style="font-size:13px;font-weight:700;margin:0 0 10px;">시스템</h3>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px;">
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">버전</div><div style="font-weight:600;">v1.0.0-rc1</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">Python</div><div style="font-weight:600;">3.11.9</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">플랫폼</div><div style="font-weight:600;">Linux (Docker)</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">데이터베이스</div><div style="font-weight:600;">SQLite (WAL)</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">SVN 컨테이너</div><div style="font-weight:600;">vaultline-svn</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">업타임</div><div style="font-weight:600;">12일 4시간</div></div>
+            </div>
+
+            <h3 style="font-size:13px;font-weight:700;margin:0 0 10px;">서비스 상태</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
+              <div class="mini-card" style="padding:8px 14px;display:flex;align-items:center;gap:6px;margin:0;"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);"></span> API</div>
+              <div class="mini-card" style="padding:8px 14px;display:flex;align-items:center;gap:6px;margin:0;"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);"></span> SVN</div>
+              <div class="mini-card" style="padding:8px 14px;display:flex;align-items:center;gap:6px;margin:0;"><span style="width:10px;height:10px;border-radius:50%;background:var(--warn);"></span> LibreOffice</div>
+              <div class="mini-card" style="padding:8px 14px;display:flex;align-items:center;gap:6px;margin:0;"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);"></span> Worker</div>
+            </div>
+
+            <h3 style="font-size:13px;font-weight:700;margin:0 0 10px;">디스크 사용량</h3>
+            <div class="mini-card" style="max-width:500px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--label);">💾 사용: 187 GB / 500 GB</span><span style="font-weight:700;color:var(--green);">37.4%</span></div>
+              <div style="height:12px;background:#eee;border-radius:6px;overflow:hidden;"><div style="width:37%;height:100%;background:var(--green);"></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px;"><span>여유: 313 GB</span><span>전체: 500 GB</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>30초 자동 새로고침 — 변경 없음 알림 없음 (필요 시 "마지막 갱신 N초 전" 표시 검토)</li>
+          <li>디스크 % 색상: ~60% 초록, 60~80% 주황, 80%+ 빨강</li>
+          <li>서비스 헬스체크 결과: ok/healthy/running=초록, degraded/warning=주황, down/error=빨강</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             20. 관리자: 백업 관리                   -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-backup">
+      <h2>20. 백업 관리<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminBackupV2.tsx</code> · 상단 즉시 백업 실행 + 하단 백업 이력 테이블
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="display:flex;flex-direction:column;">
+            <!-- 상단 즉시 백업 -->
+            <div style="padding:16px 24px;border-bottom:1px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><span>💾</span><h2 style="margin:0;font-size:16px;">백업 관리</h2></div>
+              <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:11px;"><input type="checkbox" checked disabled> 데이터베이스 포함</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:11px;"><input type="checkbox" checked disabled> SVN 저장소 포함</label>
+                <span class="btn-mock">즉시 백업</span>
+              </div>
+            </div>
+            <!-- 테이블 -->
+            <div style="flex:1;padding:16px;overflow-y:auto;">
+              <div class="mini-card" style="padding:0;">
+                <table class="mini-table">
+                  <thead><tr><th>백업 ID</th><th>상태</th><th>생성일</th><th>크기</th><th style="width:40px;">DB</th><th style="width:40px;">SVN</th><th style="width:60px;"></th></tr></thead>
+                  <tbody>
+                    <tr><td style="font-family:monospace;font-size:10px;">backup_20260420_0300</td><td><span class="chip share">완료</span></td><td style="font-size:10px;color:var(--muted);">어제</td><td style="font-size:10px;">187 MB</td><td>🟢</td><td>🟢</td><td><span class="btn-mock ghost" style="padding:2px 8px;">복구</span></td></tr>
+                    <tr><td style="font-family:monospace;font-size:10px;">backup_20260419_0300</td><td><span class="chip share">완료</span></td><td style="font-size:10px;color:var(--muted);">2일 전</td><td style="font-size:10px;">185 MB</td><td>🟢</td><td>🟢</td><td><span class="btn-mock ghost" style="padding:2px 8px;">복구</span></td></tr>
+                    <tr><td style="font-family:monospace;font-size:10px;">backup_20260418_0300</td><td><span class="chip" style="background:var(--danger-bg,#FFEBEE);color:var(--danger);">실패</span></td><td style="font-size:10px;color:var(--muted);">3일 전</td><td style="font-size:10px;">0 B</td><td>⚪</td><td>⚪</td><td><span class="btn-mock ghost" style="padding:2px 8px;opacity:0.3;">복구</span></td></tr>
+                    <tr><td style="font-family:monospace;font-size:10px;">backup_20260417_0300</td><td><span class="chip" style="background:var(--accent-bg);color:var(--accent);">진행 중</span></td><td style="font-size:10px;color:var(--muted);">방금 전</td><td style="font-size:10px;">-</td><td>🟢</td><td>⚪</td><td><span class="btn-mock ghost" style="padding:2px 8px;opacity:0.3;">복구</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>복구는 완료 상태 백업만 가능 — 실패/진행 중 백업은 버튼 비활성</li>
+          <li>DB와 SVN이 모두 포함된 백업에서 복구 시 어떤 것을 복구할지 prompt() — 나중에 모달로</li>
+          <li>자동 스케줄(매일 03:00)은 관리자 설정 페이지에서 설정 — 이 화면에는 안 보임</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             21. 관리자: 활동 로그                    -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-activity-log">
+      <h2>21. 활동 로그<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminActivityLogV2.tsx</code> · 통계 4카드 + 필터 + 테이블 + 페이지네이션 + CSV 내보내기
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="padding:20px;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+              <div style="display:flex;align-items:center;gap:6px;"><span>📊</span><h2 style="margin:0;font-size:16px;">활동 로그</h2></div>
+              <span class="btn-mock ghost">CSV 내보내기</span>
+            </div>
+            <!-- 통계 4카드 -->
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">전체 활동</div><div style="font-size:18px;font-weight:700;">1,287</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">가장 많은 액션</div><div style="font-size:14px;font-weight:700;">파일 업로드 (342)</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">가장 활발한 사용자</div><div style="font-size:16px;font-weight:700;">kim</div></div>
+              <div class="mini-card"><div style="font-size:10px;color:var(--muted);font-weight:600;">액션 종류</div><div style="font-size:18px;font-weight:700;">18</div></div>
+            </div>
+            <!-- 필터 -->
+            <div class="mini-card" style="background:#fafbfc;margin-bottom:16px;">
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                <div><div style="font-size:10px;color:var(--muted);">액션 타입</div><select style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;width:140px;" disabled><option>전체</option></select></div>
+                <div><div style="font-size:10px;color:var(--muted);">사용자</div><select style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;width:120px;" disabled><option>전체</option></select></div>
+                <div><div style="font-size:10px;color:var(--muted);">시작일</div><div class="input-mock" style="padding:4px 8px;font-size:11px;margin:0;width:110px;">2026-04-01</div></div>
+                <div><div style="font-size:10px;color:var(--muted);">종료일</div><div class="input-mock" style="padding:4px 8px;font-size:11px;margin:0;width:110px;">2026-04-21</div></div>
+                <span class="btn-mock ghost" style="padding:4px 12px;font-size:10px;">초기화</span>
+              </div>
+            </div>
+            <!-- 테이블 -->
+            <div class="mini-card" style="padding:0;">
+              <table class="mini-table">
+                <thead><tr><th>시간</th><th>사용자</th><th>액션</th><th>경로</th><th>상세</th><th>IP</th></tr></thead>
+                <tbody>
+                  <tr><td style="font-size:10px;">2분 전</td><td><strong>hong</strong></td><td>⬆ 파일 업로드</td><td style="color:var(--muted);font-size:10px;">/projects/사양서_v3.docx</td><td style="font-size:10px;">새 버전 커밋</td><td style="font-family:monospace;font-size:10px;">192.168.1.10</td></tr>
+                  <tr><td style="font-size:10px;">15분 전</td><td><strong>kim</strong></td><td>↗ 공유 생성</td><td style="color:var(--muted);font-size:10px;">/specs/api.md</td><td style="color:var(--muted);font-size:10px;">-</td><td style="font-family:monospace;font-size:10px;">192.168.1.12</td></tr>
+                  <tr><td style="font-size:10px;">1시간 전</td><td><strong>lee</strong></td><td>🔒 파일 잠금</td><td style="color:var(--muted);font-size:10px;">/design/wireframe.fig</td><td style="color:var(--muted);font-size:10px;">-</td><td style="font-family:monospace;font-size:10px;">192.168.1.15</td></tr>
+                  <tr><td style="font-size:10px;">3시간 전</td><td style="color:var(--muted);">시스템</td><td>👤 사용자 생성</td><td style="color:var(--muted);font-size:10px;">-</td><td style="font-size:10px;">박법무 가입</td><td style="color:var(--muted);font-size:10px;">-</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- 페이지네이션 -->
+            <div style="display:flex;justify-content:space-between;margin-top:10px;">
+              <span style="font-size:11px;color:var(--label);">총 1,287건 / 1 / 43 페이지</span>
+              <div><span class="btn-mock ghost" style="padding:4px 10px;font-size:10px;opacity:0.4;">이전</span> <span class="btn-mock ghost" style="padding:4px 10px;font-size:10px;">다음</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>액션 필터는 optgroup(파일/잠금/공유/승인/사용자)으로 그룹핑</li>
+          <li>페이지당 30건, 페이지 이동만 (점프 없음) — 대량 데이터시 UX 검토</li>
+          <li>CSV 내보내기는 현재 필터가 반영됨 (서버가 필터 적용해 반환)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             22. 관리자: 승인규칙                     -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-approval-rules">
+      <h2>22. 승인규칙 관리<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminApprovalRulesV2.tsx</code> · 저장소 선택 → 규칙 생성 폼 + 테이블
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="padding:20px;overflow-y:auto;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;"><span>🛡</span><h2 style="margin:0;font-size:16px;">승인규칙 관리</h2></div>
+            <div style="margin-bottom:16px;">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">저장소 선택</div>
+              <select style="width:300px;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:4px;" disabled><option>team_dev (개발팀)</option></select>
+            </div>
+
+            <!-- 생성 폼 -->
+            <div class="mini-card" style="background:#fafbfc;margin-bottom:16px;">
+              <div style="font-weight:700;font-size:12px;margin-bottom:10px;">새 규칙 추가</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                <div><div style="font-size:10px;color:var(--muted);">경로 패턴</div><div class="input-mock" style="width:200px;padding:4px 8px;font-size:11px;margin:0;">/docs/*</div></div>
+                <div><div style="font-size:10px;color:var(--muted);">승인 정책</div><select style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;width:130px;" disabled><option>1명 승인</option></select></div>
+                <div><div style="font-size:10px;color:var(--muted);">검토 그룹</div><select style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;width:140px;" disabled><option>legal</option></select></div>
+                <span class="btn-mock">규칙 추가</span>
+              </div>
+            </div>
+
+            <!-- 테이블 -->
+            <div class="mini-card" style="padding:0;">
+              <table class="mini-table">
+                <thead><tr><th>경로 패턴</th><th>승인 정책</th><th>검토 그룹</th><th style="width:50px;">상태</th><th>생성일</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td style="font-family:monospace;">/docs/*</td><td><span class="chip" style="background:var(--green-bg);color:var(--green);">1명 승인</span></td><td>legal</td><td>🟢</td><td style="color:var(--muted);font-size:10px;">1주 전</td><td style="color:var(--danger);">🗑</td></tr>
+                  <tr><td style="font-family:monospace;">/policy/**</td><td><span class="chip" style="background:var(--warn-bg);color:var(--warn);">전원 승인</span></td><td>legal, admin</td><td>🟢</td><td style="color:var(--muted);font-size:10px;">2주 전</td><td style="color:var(--danger);">🗑</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 안내 -->
+            <div style="background:var(--accent-bg);padding:12px 16px;border-radius:8px;margin-top:16px;font-size:11px;color:var(--accent);">
+              <div style="font-weight:700;margin-bottom:4px;">자동 승인 규칙이란?</div>
+              <div>경로 패턴에 일치하는 파일이 커밋되면 자동으로 승인 요청이 생성됩니다.</div>
+              <div style="font-size:10px;margin-top:4px;">예: <code style="background:#fff;padding:1px 4px;border-radius:3px;">/reports/*</code> → reports 폴더 커밋 시 자동 승인 요청</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>저장소 선택 전에는 빈 상태 — 전역 규칙이 아니라 저장소별 규칙</li>
+          <li>승인 정책 2종: any_approve (1명 승인)/all_must_approve (전원)</li>
+          <li>검토 그룹은 선택사항 — 미지정 시 저장소의 쓰기 권한 사용자 전체가 검토자</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════ -->
+    <!--             23. 관리자: 태그 관리                    -->
+    <!-- ═════════════════════════════════════════════════ -->
+    <section class="section" id="admin-tag-manage">
+      <h2>23. 태그 관리<span class="mode-badge admin">관리자 셸</span></h2>
+      <div class="meta">
+        <code>AdminTagManageV2.tsx</code> · 섹션1 (시스템 태그 CRUD) + 섹션2 (자동태그 규칙)
+      </div>
+
+      <div class="page-frame">
+        <div class="shell-mini"><span>■ VaultLine</span><span style="flex:1;">관리자</span><span class="pill">검색 ⌘K</span><span>🔔</span><span>Admin ▾</span></div>
+        <div class="body-mini">
+          <div class="sb-mini" style="background:#f0f4ff;">관리자<br>사이드바</div>
+          <div class="main-mini" style="padding:20px;overflow-y:auto;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;"><span>🏷</span><h2 style="margin:0;font-size:16px;">태그 관리</h2></div>
+
+            <!-- 섹션 1: 시스템 태그 -->
+            <h3 style="font-size:13px;font-weight:700;margin:0 0 10px;">시스템 태그 관리</h3>
+            <div class="mini-card" style="background:#fafbfc;margin-bottom:12px;">
+              <div style="display:flex;gap:10px;align-items:flex-end;">
+                <div><div style="font-size:10px;color:var(--muted);">이름</div><div class="input-mock" style="width:180px;padding:4px 8px;font-size:11px;margin:0;">태그 이름</div></div>
+                <div><div style="font-size:10px;color:var(--muted);">색상</div><div style="width:32px;height:28px;background:#3B82F6;border-radius:4px;"></div></div>
+                <span class="btn-mock">태그 추가</span>
+              </div>
+            </div>
+            <div class="mini-card" style="padding:0;margin-bottom:20px;">
+              <table class="mini-table">
+                <thead><tr><th>이름</th><th>생성일</th><th style="text-align:right;">작업</th></tr></thead>
+                <tbody>
+                  <tr><td style="display:flex;align-items:center;gap:8px;"><span style="width:12px;height:12px;border-radius:50%;background:#ef4444;"></span> 중요</td><td style="color:var(--muted);font-size:10px;">2025-06-10</td><td style="text-align:right;color:var(--danger);font-size:10px;">🗑 삭제</td></tr>
+                  <tr><td style="display:flex;align-items:center;gap:8px;"><span style="width:12px;height:12px;border-radius:50%;background:#10b981;"></span> 검토완료</td><td style="color:var(--muted);font-size:10px;">2025-07-22</td><td style="text-align:right;color:var(--danger);font-size:10px;">🗑 삭제</td></tr>
+                  <tr><td style="display:flex;align-items:center;gap:8px;"><span style="width:12px;height:12px;border-radius:50%;background:#f59e0b;"></span> 보류</td><td style="color:var(--muted);font-size:10px;">2025-08-05</td><td style="text-align:right;color:var(--danger);font-size:10px;">🗑 삭제</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 섹션 2: 자동태그 규칙 -->
+            <h3 style="font-size:13px;font-weight:700;margin:0 0 10px;">자동태그 규칙</h3>
+            <div class="mini-card" style="background:#fafbfc;margin-bottom:12px;">
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                <div><div style="font-size:10px;color:var(--muted);">태그</div><select style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;width:130px;" disabled><option>중요</option></select></div>
+                <div><div style="font-size:10px;color:var(--muted);">저장소 ID</div><div class="input-mock" style="width:70px;padding:4px 8px;font-size:11px;margin:0;">3</div></div>
+                <div><div style="font-size:10px;color:var(--muted);">경로 패턴</div><div class="input-mock" style="width:140px;padding:4px 8px;font-size:11px;margin:0;">/docs/**</div></div>
+                <div><div style="font-size:10px;color:var(--muted);">확장자</div><div class="input-mock" style="width:130px;padding:4px 8px;font-size:11px;margin:0;">.pdf,.docx</div></div>
+                <span class="btn-mock">규칙 추가</span>
+              </div>
+            </div>
+            <div class="mini-card" style="padding:0;">
+              <table class="mini-table">
+                <thead><tr><th>태그명</th><th>경로 패턴</th><th>확장자 패턴</th><th style="width:60px;text-align:center;">활성</th></tr></thead>
+                <tbody>
+                  <tr><td>중요</td><td style="font-family:monospace;color:var(--muted);">/docs/**</td><td style="font-family:monospace;color:var(--muted);">.pdf,.docx</td><td style="text-align:center;"><span class="chip share">ON</span></td></tr>
+                  <tr><td>보류</td><td style="font-family:monospace;color:var(--muted);">/tmp/*</td><td style="color:var(--muted);">-</td><td style="text-align:center;"><span class="chip" style="background:#f0f0f0;color:var(--muted);">OFF</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <strong>논의 메모</strong>
+        <ul>
+          <li>시스템 태그는 모든 사용자가 사용 가능, 개인 태그와 구분 (개인 태그는 TagsPage에서 사용자가 직접 생성)</li>
+          <li>자동태그 규칙의 저장소 ID를 직접 숫자로 입력 — 드롭다운으로 바꾸는 게 UX상 나을 것</li>
+          <li>확장자 패턴은 콤마로 여러 개 입력</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="footer-note">
+      VaultLine V2 · 현재 구현 와이어프레임 23개 섹션 (공통 셸 + 사용자 11개 + 관리자 10개 + 독립 2개)<br>
+      추출 기준: <code>frontend/src/pages/v2/</code> · <code>db17f83 (Phase 9.1)</code> · 작성일: 2026-04-21<br>
+      디자인 변경 논의용 — 각 페이지 하단 <em style="background:#fffbe6;padding:1px 4px;border-radius:2px;">논의 메모</em>에 코멘트 추가하세요.
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

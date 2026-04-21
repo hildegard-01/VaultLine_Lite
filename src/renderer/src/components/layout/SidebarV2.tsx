@@ -447,18 +447,14 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
         />
       </SidebarSection>
 
-      {/* 커넥티드 전용: 관리 */}
-      {connected && (
-        <>
-          <div style={dividerStyle} />
-          <SidebarItem
-            icon={<SettingsIcon width={IC} height={IC} color={colors.textSub} />}
-            label="관리자"
-            active={location.pathname.startsWith('/admin')}
-            onClick={() => navigate('/admin')}
-          />
-        </>
-      )}
+      {/* 관리자 — 오프라인에서도 진입 가능 (Phase U) */}
+      <div style={dividerStyle} />
+      <SidebarItem
+        icon={<SettingsIcon width={IC} height={IC} color={colors.textSub} />}
+        label="관리자"
+        active={location.pathname.startsWith('/admin')}
+        onClick={() => navigate('/admin')}
+      />
 
       {/* 하단 고정: 디스크 사용량 */}
       <DiskUsageV2 disk={disk} />

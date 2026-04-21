@@ -71,6 +71,9 @@ export function registerIpcHandlers(): void {
   // 서버 연동 (Phase C)
   registerServerHandlers()
 
+  // 시스템 정보 — 관리자 화면용 (Phase U)
+  registerSystemHandlers()
+
   // 다이얼로그 — Electron 네이티브 파일 선택
   handleIpc('dialog:open-file', async () => {
     const { dialog, BrowserWindow } = require('electron')
@@ -119,3 +122,4 @@ import { registerInvitationHandlers } from './invitation.ipc'
 import { registerSyncHandlers } from './sync.ipc'
 import { registerActivityHandlers } from './activity.ipc'
 import { registerServerHandlers } from './server.ipc'
+import { registerSystemHandlers } from './system.ipc'

@@ -26,8 +26,13 @@ function getBackupDir(): string {
   return dir
 }
 
-/** 백업 생성 */
-export async function createBackup(): Promise<BackupEntry> {
+/** 백업 생성 — includeDB/includeSVN으로 부분 백업 지원 */
+export async function createBackup(
+  opts: { includeDB?: boolean; includeSVN?: boolean } = {}
+): Promise<BackupEntry> {
+  const includeDB = opts.includeDB !== false
+  const includeSVN = opts.includeSVN !== false
+
   const db = getDatabase()
   const repos = db.prepare(`
     SELECT id, name, svn_path as svnPath, wc_path as wcPath
@@ -41,28 +46,34 @@ export async function createBackup(): Promise<BackupEntry> {
   mkdirSync(stagingDir, { recursive: true })
 
   try {
-    // 1. 각 SVN 저장소 hotcopy
-    const reposDir = join(stagingDir, 'repos')
-    mkdirSync(reposDir, { recursive: true })
+    // 1. 각 SVN 저장소 hotcopy (includeSVN=true인 경우만)
+    if (includeSVN) {
+      const reposDir = join(stagingDir, 'repos')
+      mkdirSync(reposDir, { recursive: true })
 
-    for (const repo of repos) {
-      if (existsSync(repo.svnPath)) {
-        const destPath = join(reposDir, `repo-${repo.id}`)
-        await SvnService.hotcopy(repo.svnPath, destPath)
+      for (const repo of repos) {
+        if (existsSync(repo.svnPath)) {
+          const destPath = join(reposDir, `repo-${repo.id}`)
+          await SvnService.hotcopy(repo.svnPath, destPath)
+        }
       }
     }
 
-    // 2. SQLite DB 백업
-    const dbBackupPath = join(stagingDir, 'app.db')
-    db.backup(dbBackupPath)
+    // 2. SQLite DB 백업 (includeDB=true인 경우만)
+    if (includeDB) {
+      const dbBackupPath = join(stagingDir, 'app.db')
+      db.backup(dbBackupPath)
+    }
 
-    // 3. 매니페스트 작성
+    // 3. 매니페스트 작성 (부분 백업 여부 포함)
     const manifest = {
       version: '1.0',
       createdAt: new Date().toISOString(),
       appVersion: app.getVersion(),
       repoCount: repos.length,
-      repos: repos.map(r => ({ id: r.id, name: r.name }))
+      repos: repos.map(r => ({ id: r.id, name: r.name })),
+      includeDB,
+      includeSVN,
     }
     writeFileSync(join(stagingDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8')
 
@@ -106,8 +117,14 @@ export async function createBackup(): Promise<BackupEntry> {
   }
 }
 
-/** 백업 복원 */
-export async function restoreBackup(backupId: string): Promise<void> {
+/** 백업 복원 — includeDB/includeSVN으로 부분 복원 지원 */
+export async function restoreBackup(
+  backupId: string,
+  opts: { includeDB?: boolean; includeSVN?: boolean } = {}
+): Promise<void> {
+  const includeDB = opts.includeDB !== false
+  const includeSVN = opts.includeSVN !== false
+
   const backupDir = getBackupDir()
   const zipPath = join(backupDir, `${backupId}.zip`)
 
@@ -135,9 +152,9 @@ export async function restoreBackup(backupId: string): Promise<void> {
       throw new Error('유효하지 않은 백업 파일입니다 (manifest.json 없음)')
     }
 
-    // 3. DB 복원
+    // 3. DB 복원 (includeDB=true인 경우만)
     const dbBackupPath = join(stagingDir, 'app.db')
-    if (existsSync(dbBackupPath)) {
+    if (includeDB && existsSync(dbBackupPath)) {
       const db = getDatabase()
       const currentDbPath = (db.pragma('database_list') as Array<{ file: string }>)[0]?.file
       if (currentDbPath) {
@@ -148,9 +165,9 @@ export async function restoreBackup(backupId: string): Promise<void> {
       }
     }
 
-    // 4. SVN 저장소 복원
+    // 4. SVN 저장소 복원 (includeSVN=true인 경우만)
     const reposDir = join(stagingDir, 'repos')
-    if (existsSync(reposDir)) {
+    if (includeSVN && existsSync(reposDir)) {
       const db = getDatabase()
       const repos = db.prepare(`
         SELECT id, svn_path as svnPath FROM repositories WHERE status = 'active'
