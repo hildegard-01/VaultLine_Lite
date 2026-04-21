@@ -158,7 +158,7 @@ export default function DiffTab({ repoId, path }: DiffTabProps) {
       {/* Diff 결과 */}
       {isLoading && <div style={S.empty}>Diff를 생성하는 중...</div>}
       {error && <div style={S.empty}>Diff를 생성하지 못했습니다.</div>}
-      {canDiff && diffData && <DiffContent diff={diffData as string} />}
+      {canDiff && !isLoading && !error && diffData !== undefined && <DiffContent diff={diffData as string} />}
       {!compareTriggered && <div style={S.empty}>두 리비전을 선택한 후 비교 버튼을 클릭하세요.</div>}
     </div>
   );

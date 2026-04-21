@@ -8,54 +8,51 @@ interface PreviewModalProps {
   onClose: () => void
 }
 
-/** 로컬 파일 경로 → vaultline-preview:// URL (한글 경로 인코딩) */
-function toPreviewUrl(absPath: string): string {
-  const normalized = absPath.replace(/\\/g, '/')
-  // 각 경로 세그먼트를 인코딩
-  const encoded = normalized.split('/').map(seg => encodeURIComponent(seg)).join('/')
-  return `vaultline-preview://${encoded}`
+const EXT_MIME: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp',
 }
 
 export function PreviewModal({ file, repoId, onClose }: PreviewModalProps) {
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'error'; message: string }
-    | { status: 'ready'; type: string; url?: string; text?: string }
+    | { status: 'ready'; type: string; base64?: string; text?: string; mime?: string }
   >({ status: 'loading' })
 
   useEffect(() => {
     let cancelled = false
 
-    invoke('preview:generate', { repoId, path: file.path })
-      .then(async ({ cachePath, type }) => {
+    const load = async () => {
+      try {
+        const { cachePath, type } = await invoke('preview:generate', { repoId, path: file.path })
         if (cancelled) return
 
-        console.log('[Preview] type:', type, 'cachePath:', cachePath)
+        const { data } = await invoke('preview:read-file', { filePath: cachePath })
+        if (cancelled) return
 
         if (type === 'text') {
-          try {
-            const { data } = await invoke('preview:read-file', { filePath: cachePath })
-            const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0))
-            const text = new TextDecoder('utf-8').decode(bytes)
-            if (!cancelled) setState({ status: 'ready', type, text })
-          } catch {
-            if (!cancelled) setState({ status: 'ready', type, text: '(텍스트를 불러올 수 없습니다)' })
-          }
+          const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0))
+          const text = new TextDecoder('utf-8').decode(bytes)
+          setState({ status: 'ready', type, text })
+        } else if (type === 'image') {
+          const ext = file.name.split('.').pop()?.toLowerCase() || ''
+          const mime = EXT_MIME[ext] || 'image/png'
+          setState({ status: 'ready', type, base64: data, mime })
         } else {
-          const url = toPreviewUrl(cachePath)
-          console.log('[Preview] url:', url)
-          if (!cancelled) setState({ status: 'ready', type, url })
+          // pdf
+          setState({ status: 'ready', type, base64: data, mime: 'application/pdf' })
         }
-      })
-      .catch((err) => {
+      } catch (err: any) {
         if (!cancelled) {
-          console.error('[Preview] error:', err)
-          setState({ status: 'error', message: err?.message || String(err) || '미리보기 실패' })
+          setState({ status: 'error', message: err?.message || '미리보기 실패' })
         }
-      })
+      }
+    }
 
+    load()
     return () => { cancelled = true }
-  }, [repoId, file.path])
+  }, [repoId, file.path, file.name])
 
   return (
     <div
@@ -82,14 +79,22 @@ export function PreviewModal({ file, repoId, onClose }: PreviewModalProps) {
             </div>
           )}
 
-          {state.status === 'ready' && state.type === 'image' && state.url && (
+          {state.status === 'ready' && state.type === 'image' && state.base64 && (
             <div className="flex items-center justify-center p-4 min-h-64">
-              <img src={state.url} alt={file.name} className="max-w-full max-h-[72vh] object-contain rounded shadow" />
+              <img
+                src={`data:${state.mime};base64,${state.base64}`}
+                alt={file.name}
+                className="max-w-full max-h-[72vh] object-contain rounded shadow"
+              />
             </div>
           )}
 
-          {state.status === 'ready' && state.type === 'pdf' && state.url && (
-            <iframe src={state.url} className="w-full h-[72vh] border-0" title={file.name} />
+          {state.status === 'ready' && state.type === 'pdf' && state.base64 && (
+            <iframe
+              src={`data:application/pdf;base64,${state.base64}`}
+              className="w-full h-[72vh] border-0"
+              title={file.name}
+            />
           )}
 
           {state.status === 'ready' && state.type === 'text' && (
