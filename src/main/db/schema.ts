@@ -10,16 +10,18 @@ export const SCHEMA_VERSION = 3
 export const CREATE_TABLES_SQL = `
 -- ═══ 저장소 ═══
 CREATE TABLE IF NOT EXISTS repositories (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT NOT NULL UNIQUE,
-    svn_path        TEXT NOT NULL UNIQUE,
-    wc_path         TEXT NOT NULL UNIQUE,
-    description     TEXT DEFAULT '',
-    icon            TEXT DEFAULT 'folder',
-    display_order   INTEGER DEFAULT 0,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_accessed   DATETIME,
-    status          TEXT DEFAULT 'active'
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                 TEXT NOT NULL UNIQUE,
+    svn_path             TEXT NOT NULL UNIQUE,
+    wc_path              TEXT NOT NULL UNIQUE,
+    description          TEXT DEFAULT '',
+    icon                 TEXT DEFAULT 'folder',
+    display_order        INTEGER DEFAULT 0,
+    created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_accessed        DATETIME,
+    status               TEXT DEFAULT 'active',
+    quota_bytes          INTEGER,                -- NULL = 무제한 (v3)
+    pending_deletion_at  DATETIME                -- 30일 예약 삭제 (v3)
 );
 
 CREATE TABLE IF NOT EXISTS repo_settings (
@@ -129,14 +131,17 @@ CREATE TABLE IF NOT EXISTS activity_log (
 
 -- ═══ P2P 공유: 사용자 관리 (v1.3) ═══
 CREATE TABLE IF NOT EXISTS shared_users (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo_id        INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    username       TEXT NOT NULL,
-    display_name   TEXT NOT NULL,
-    password_plain TEXT NOT NULL,
-    permission     TEXT DEFAULT 'rw',
-    is_active      BOOLEAN DEFAULT 1,
-    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id             INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    username            TEXT NOT NULL,
+    display_name        TEXT NOT NULL,
+    password_plain      TEXT NOT NULL,
+    permission          TEXT DEFAULT 'rw',
+    is_active           BOOLEAN DEFAULT 1,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status              TEXT DEFAULT 'active',   -- active/locked/inactive (v3)
+    last_login_at       DATETIME,                -- v3
+    failed_login_count  INTEGER DEFAULT 0,       -- v3
     UNIQUE(repo_id, username)
 );
 
@@ -257,4 +262,14 @@ CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
 CREATE INDEX IF NOT EXISTS idx_svn_locks_repo ON svn_locks(repo_id, repo_type);
 CREATE INDEX IF NOT EXISTS idx_search_meta_repo ON search_metadata(repo_id);
 CREATE INDEX IF NOT EXISTS idx_preview_cache_repo ON preview_cache(repo_id);
+
+-- ═══ 서버 동기화 큐 (Phase C) ═══
+CREATE TABLE IF NOT EXISTS server_sync_queue (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id    INTEGER NOT NULL,
+    revision   INTEGER NOT NULL,
+    payload    TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repo_id, revision)
+);
 `

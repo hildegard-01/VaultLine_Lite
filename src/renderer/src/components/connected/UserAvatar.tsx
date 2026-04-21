@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { invoke } from '@renderer/services/ipcClient'
-import type { ModeUser } from '@renderer/hooks/useMode'
+
+interface ModeUser {
+  id: number
+  username: string
+  role: string
+}
 
 /**
  * UserAvatar — 헤더 사용자 아바타 + 드롭다운 메뉴

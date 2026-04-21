@@ -1,8 +1,8 @@
 import { APP_NAME } from '@shared/constants'
 import { useMode } from '@renderer/hooks/useMode'
-import { ConnectionIndicator } from '@renderer/components/connected/ConnectionIndicator'
 import { NotificationBell } from '@renderer/components/connected/NotificationBell'
 import { UserAvatar } from '@renderer/components/connected/UserAvatar'
+import { ConnectionIndicator } from '@renderer/components/connected/ConnectionIndicator'
 
 interface HeaderProps {
   onOpenSettings?: () => void

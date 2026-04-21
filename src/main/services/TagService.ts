@@ -1,7 +1,7 @@
 import { getDatabase } from './DatabaseService'
 import type { Tag } from '@shared/types/ipc'
-import * as ModeManager from './server/ModeManager'
-import { syncTagAttach, syncTagDetach } from './server/MetadataSyncService'
+import { modeManager } from './server/ModeManager'
+import { MetadataSyncService } from './server/MetadataSyncService'
 
 /**
  * TagService — 태그 CRUD + 자동 규칙
@@ -41,7 +41,7 @@ export function attachTag(repoId: number, filePath: string, tagId: number): void
     VALUES (?, ?, ?)
   `).run(repoId, filePath, tagId)
   // 서버 동기화 훅 (Phase C)
-  if (ModeManager.isConnected()) syncTagAttach(repoId, filePath, tagId).catch(() => {})
+  if (modeManager.isConnected()) MetadataSyncService.pushTagAttach(repoId, filePath, tagId).catch(() => {})
 }
 
 /** 파일에서 태그 제거 */
@@ -50,7 +50,7 @@ export function detachTag(repoId: number, filePath: string, tagId: number): void
   db.prepare('DELETE FROM file_tags WHERE repo_id = ? AND file_path = ? AND tag_id = ?')
     .run(repoId, filePath, tagId)
   // 서버 동기화 훅 (Phase C)
-  if (ModeManager.isConnected()) syncTagDetach(repoId, filePath, tagId).catch(() => {})
+  if (modeManager.isConnected()) MetadataSyncService.pushTagDetach(repoId, filePath, tagId).catch(() => {})
 }
 
 /** 파일의 태그 목록 */

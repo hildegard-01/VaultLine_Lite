@@ -15,10 +15,8 @@ import { initDatabase, closeDatabase } from './services/DatabaseService'
 import { registerIpcHandlers } from './ipc'
 import { hasPendingChanges, closeAll as closeWatcher } from './services/FileWatcherService'
 import { stopAll as stopAllSvnServe } from './services/SvnServeService'
-import * as ModeManager from './services/server/ModeManager'
-import { autoConnect } from './services/server/ServerConnectionService'
-import { stop as stopHeartbeat } from './services/server/PresenceService'
-import { disconnect as disconnectFileProxy } from './services/server/FileProxyService'
+import { modeManager } from './services/server/ModeManager'
+import { PresenceService } from './services/server/PresenceService'
 
 /**
  * Electron Main Process 진입점
@@ -104,16 +102,20 @@ app.whenReady().then(() => {
   // IPC 핸들러 등록
   registerIpcHandlers()
 
-  // 서버 모드 초기화 (config.json server.url 확인)
-  const { shouldAutoConnect, serverUrl } = ModeManager.initialize()
-  if (shouldAutoConnect && serverUrl) {
-    // 서버 접근 가능 여부만 확인 (로그인은 UI에서)
-    autoConnect(serverUrl).then((reachable) => {
-      if (!reachable) {
-        // 서버 응답 없음 → 재연결 예약
-        ModeManager.scheduleRetry(() => autoConnect(serverUrl))
+  // 서버 모드 초기화 (config.json server 블록 로드)
+  try {
+    const { readFileSync, existsSync } = require('fs') as typeof import('fs')
+    const configPath = app.isPackaged
+      ? require('path').join(process.resourcesPath, 'config.json')
+      : require('path').join(app.getAppPath(), 'config.json')
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+      if (config?.server) {
+        modeManager.initialize(config.server).catch(() => {})
       }
-    })
+    }
+  } catch {
+    // config.json 없음 → 오프라인 모드 유지
   }
 
   // 메인 윈도우 생성
@@ -162,9 +164,8 @@ app.on('before-quit', async (event) => {
 
 // 앱 종료 시 watcher + svnserve + DB + 서버 서비스 정리
 app.on('will-quit', async () => {
-  stopHeartbeat()
-  disconnectFileProxy()
-  ModeManager.cleanup()
+  PresenceService.stop()
+  await modeManager.cleanup()
   stopAllSvnServe()
   await closeWatcher()
   closeDatabase()

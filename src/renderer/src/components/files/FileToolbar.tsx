@@ -7,15 +7,15 @@ interface FileToolbarProps {
   onNewFolder: () => Promise<void> | void
   onLockRules?: () => void
   onBulkDelete?: () => void
+  onBulkMove?: () => void
   onBulkLock?: () => void
   onBulkShare?: () => void
-  onBulkMove?: () => void
   onClearChecked?: () => void
 }
 
 export function FileToolbar({
   itemCount, checkedCount, onUpload, onNewFolder, onLockRules,
-  onBulkDelete, onBulkLock, onBulkShare, onBulkMove, onClearChecked
+  onBulkDelete, onBulkMove, onBulkLock, onBulkShare, onClearChecked
 }: FileToolbarProps) {
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
@@ -43,6 +43,12 @@ export function FileToolbar({
             선택 해제
           </button>
           <div className="w-px h-5 bg-gray-200 dark:bg-gray-600 mx-1" />
+          {onBulkMove && (
+            <button onClick={onBulkMove}
+              className="text-[11px] px-2.5 py-1 border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50">
+              이동
+            </button>
+          )}
           {onBulkDelete && (
             <button onClick={onBulkDelete}
               className="text-[11px] px-2.5 py-1 border border-red-200 text-red-500 rounded-md hover:bg-red-50">
@@ -59,12 +65,6 @@ export function FileToolbar({
             <button onClick={onBulkShare}
               className="text-[11px] px-2.5 py-1 border border-green-200 text-green-600 rounded-md hover:bg-green-50">
               공유
-            </button>
-          )}
-          {onBulkMove && (
-            <button onClick={onBulkMove}
-              className="text-[11px] px-2.5 py-1 border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50">
-              이동
             </button>
           )}
         </>

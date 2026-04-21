@@ -50,4 +50,20 @@ export function registerFileManageHandlers(): void {
     }
     return await FileManageService.restoreDeleted(repoId, trashItemId, commitMessage)
   })
+
+  // 일괄 이동 (같은 저장소 내)
+  handleIpc('file:bulk-move', async (args: unknown) => {
+    const { repoId, srcPaths, destFolder, commitMessage } = args as {
+      repoId: number; srcPaths: string[]; destFolder: string; commitMessage: string
+    }
+    return await FileManageService.bulkMove(repoId, srcPaths, destFolder, commitMessage)
+  })
+
+  // 저장소 간 이동
+  handleIpc('file:cross-repo-move', async (args: unknown) => {
+    const { srcRepoId, destRepoId, srcPaths, destFolder, commitMessage } = args as {
+      srcRepoId: number; destRepoId: number; srcPaths: string[]; destFolder: string; commitMessage: string
+    }
+    return await FileManageService.crossRepoMove(srcRepoId, destRepoId, srcPaths, destFolder, commitMessage)
+  })
 }

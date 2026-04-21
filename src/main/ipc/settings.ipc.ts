@@ -5,7 +5,7 @@ import * as SvnService from '../services/SvnService'
 import * as CommitService from '../services/CommitService'
 import { getLockStatus } from '../services/LockService'
 import { getDatabase } from '../services/DatabaseService'
-import type { Repository, SvnStatusEntry as IpcStatusEntry } from '@shared/types/ipc'
+import type { AppSettings, Repository, SvnStatusEntry as IpcStatusEntry } from '@shared/types/ipc'
 
 /**
  * 설정 + 백업 + 일괄 커밋 IPC 핸들러 (Phase 10)
@@ -44,15 +44,42 @@ export function registerSettingsHandlers(): void {
     return SettingsService.getDiskUsage()
   })
 
+  // 카테고리별 설정 초기화 (Phase U)
+  handleIpc('settings:reset-category', (args) => {
+    const { category } = args as { category: 'general' | 'security' | 'file' | 'trash' | 'notification' }
+    const CATEGORY_KEYS: Record<string, Array<keyof AppSettings>> = {
+      general: ['theme', 'language', 'sidebarWidth', 'defaultView'],
+      security: [],
+      file: ['svnBinaryPath', 'libreOfficePath', 'autoCommit', 'autoCommitDelay'],
+      trash: [],
+      notification: [],
+    }
+    const keys = CATEGORY_KEYS[category] || []
+    const db = getDatabase()
+    const del = db.prepare(`DELETE FROM app_settings WHERE key = ?`)
+    const tx = db.transaction(() => {
+      for (const k of keys) del.run(k)
+    })
+    tx()
+    return SettingsService.getAppSettings()
+  })
+
   // ─── 백업 ───
 
-  handleIpc('backup:create', async () => {
-    return BackupService.createBackup()
+  handleIpc('backup:create', async (args) => {
+    const opts = (args || {}) as { includeDB?: boolean; includeSVN?: boolean }
+    return BackupService.createBackup({
+      includeDB: opts.includeDB !== false,
+      includeSVN: opts.includeSVN !== false,
+    })
   })
 
   handleIpc('backup:restore', async (args) => {
-    const { id } = args as { id: string }
-    await BackupService.restoreBackup(id)
+    const { id, includeDB, includeSVN } = args as { id: string; includeDB?: boolean; includeSVN?: boolean }
+    await BackupService.restoreBackup(id, {
+      includeDB: includeDB !== false,
+      includeSVN: includeSVN !== false,
+    })
   })
 
   handleIpc('backup:list', () => {

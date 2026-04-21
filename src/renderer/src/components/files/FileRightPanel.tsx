@@ -39,6 +39,7 @@ interface FileRightPanelProps {
   onRestoreVersion?: (file: FileEntry, revision: number) => void
   onClearSelection?: () => void
   onTagsChanged?: () => void
+  onDetail?: (file: FileEntry) => void
 }
 
 function formatSize(bytes: number): string {
@@ -62,7 +63,7 @@ function formatDate(dateStr: string): string {
 
 export function FileRightPanel({
   file, repoId, recentCommits = [], repoStats,
-  onLockToggle, onShare, onDelete, onMove, onPreview, onRestoreVersion, onClearSelection, onTagsChanged
+  onLockToggle, onShare, onDelete, onMove, onPreview, onRestoreVersion, onClearSelection, onTagsChanged, onDetail
 }: FileRightPanelProps) {
 
   const [showTagPicker, setShowTagPicker] = useState(false)
@@ -182,6 +183,14 @@ export function FileRightPanel({
 
       {/* 빠른 작업 */}
       <div className="grid grid-cols-2 gap-1.5 mb-4">
+        {file.type !== 'dir' && (
+          <button
+            onClick={() => onDetail?.(file)}
+            className="py-1.5 text-[11px] font-semibold border border-blue-200 text-blue-600 rounded-md bg-white dark:bg-gray-800 hover:bg-blue-50 transition"
+          >
+            상세보기
+          </button>
+        )}
         {file.type !== 'dir' && (
           <button
             onClick={() => onPreview?.(file)}

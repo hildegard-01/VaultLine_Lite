@@ -1,184 +1,158 @@
-import { readFileSync, existsSync } from 'fs'
-import { join } from 'path'
-import { app } from 'electron'
-import { SERVER_RETRY_INTERVAL_MS } from '@shared/constants'
-
 /**
- * ModeManager — 오프라인/커넥티드 모드 전환 관리
+ * ModeManager — 오프라인/커넥티드 모드 전환 핵심
  *
- * 역할:
- * - config.json server.url 유무로 초기 모드 결정
- * - 연결 성공 시 커넥티드 모드, 실패 시 오프라인 유지 + 자동 재시도
- * - 모든 서버 서비스가 이 모듈의 isConnected()를 기준으로 동작 분기
- *
- * 구성:
- * - AppMode 타입
- * - initialize(): 앱 시작 시 1회 호출
- * - isConnected(): 현재 모드 boolean 반환
- * - getStatus(): 현재 상태 상세 반환
- * - setConnected(user): 로그인 성공 후 커넥티드 모드 전환
- * - setOffline(): 연결 해제 / 오류 시 오프라인 전환
- * - scheduleRetry(): 서버 재연결 주기적 시도 예약
+ * 역할: 서버 연결 상태를 관리하고 모드를 전환합니다.
+ *       연결 실패 시 자동 폴백(오프라인) + 주기적 재시도.
+ * 구성: ModeManager 싱글턴 / initialize() / connect() / disconnect() / isConnected()
  */
+
+import { BrowserWindow } from 'electron'
+import log from 'electron-log'
+import { ServerConnectionService } from './ServerConnectionService'
+import { PresenceService } from './PresenceService'
 
 export type AppMode = 'offline' | 'connected'
 
-export interface ServerConfig {
+interface ServerConfig {
   url: string
   autoConnect: boolean
   retryIntervalSec: number
-  heartbeatIntervalSec: number
-  sync: {
-    pushCommitMeta: boolean
-    pushPreviewOnCommit: boolean
-    previewPushMaxSizeMB: number
-    previewPushFormats: string[]
-    allowFileProxy: boolean
-  }
 }
 
-export interface ConnectedUser {
-  id: number
-  username: string
-  role: string
-}
+class ModeManager {
+  private mode: AppMode = 'offline'
+  private serverUrl = ''
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryIntervalMs = 30000
 
-export interface ModeStatus {
-  mode: AppMode
-  serverUrl: string | null
-  user: ConnectedUser | null
-  retryScheduled: boolean
-}
-
-// 싱글턴 상태
-let _mode: AppMode = 'offline'
-let _serverUrl: string | null = null
-let _user: ConnectedUser | null = null
-let _retryTimer: ReturnType<typeof setTimeout> | null = null
-let _initialized = false
-let _serverConfig: ServerConfig | null = null
-
-/** config.json 파일 로드 */
-function loadServerConfig(): ServerConfig | null {
-  try {
-    // 개발: 프로젝트 루트 / 프로덕션: resources 폴더
-    const configPath = app.isPackaged
-      ? join(process.resourcesPath, 'config.json')
-      : join(app.getAppPath(), 'config.json')
-
-    if (!existsSync(configPath)) return null
-
-    const raw = readFileSync(configPath, 'utf-8')
-    const parsed = JSON.parse(raw)
-    return parsed.server ?? null
-  } catch {
-    return null
-  }
-}
-
-/**
- * 초기화 — 앱 시작 시 1회 호출
- * config.json을 읽어 서버 URL이 있으면 커넥티드 시도 여부를 반환
- * 실제 연결은 ServerConnectionService.autoConnect()가 담당
- */
-export function initialize(): { shouldAutoConnect: boolean; serverUrl: string | null } {
-  if (_initialized) return { shouldAutoConnect: false, serverUrl: _serverUrl }
-
-  _initialized = true
-  _serverConfig = loadServerConfig()
-
-  if (!_serverConfig || !_serverConfig.url) {
-    // server.url 없음 → 오프라인 모드
-    _mode = 'offline'
-    return { shouldAutoConnect: false, serverUrl: null }
+  /** 현재 모드 반환 */
+  getMode(): AppMode {
+    return this.mode
   }
 
-  _serverUrl = _serverConfig.url
-  return {
-    shouldAutoConnect: _serverConfig.autoConnect,
-    serverUrl: _serverConfig.url
+  /** 커넥티드 여부 */
+  isConnected(): boolean {
+    return this.mode === 'connected'
   }
-}
 
-/** 커넥티드 모드로 전환 (로그인 성공 후 호출) */
-export function setConnected(user: ConnectedUser, serverUrl: string): void {
-  _mode = 'connected'
-  _user = user
-  _serverUrl = serverUrl
-  _cancelRetry()
-}
-
-/** 오프라인 모드로 전환 (연결 해제 / 오류 시 호출) */
-export function setOffline(): void {
-  _mode = 'offline'
-  _user = null
-}
-
-/** 현재 커넥티드 모드 여부 */
-export function isConnected(): boolean {
-  return _mode === 'connected'
-}
-
-/** 현재 상태 상세 반환 */
-export function getStatus(): ModeStatus {
-  return {
-    mode: _mode,
-    serverUrl: _serverUrl,
-    user: _user,
-    retryScheduled: _retryTimer !== null
+  /** 서버 URL */
+  getServerUrl(): string {
+    return this.serverUrl
   }
-}
 
-/** 서버 config 반환 */
-export function getServerConfig(): ServerConfig | null {
-  return _serverConfig
-}
+  /** 초기화 — config.json에서 서버 설정 로드 */
+  async initialize(config: ServerConfig): Promise<void> {
+    this.serverUrl = config.url || ''
+    this.retryIntervalMs = (config.retryIntervalSec || 30) * 1000
 
-/** 현재 접속 중인 사용자 반환 */
-export function getCurrentUser(): ConnectedUser | null {
-  return _user
-}
+    if (!this.serverUrl) {
+      log.info('[ModeManager] 서버 URL 미설정 → 오프라인 모드')
+      this.setMode('offline')
+      return
+    }
 
-/**
- * 재연결 예약 — 오프라인 전환 시 자동 재시도 스케줄
- * onRetry 콜백이 true를 반환하면 재시도 성공으로 간주하고 타이머 종료
- */
-export function scheduleRetry(onRetry: () => Promise<boolean>): void {
-  _cancelRetry()
-
-  const intervalMs = _serverConfig?.retryIntervalSec
-    ? _serverConfig.retryIntervalSec * 1_000
-    : SERVER_RETRY_INTERVAL_MS
-
-  const attempt = async (): Promise<void> => {
-    if (_mode === 'connected') return // 이미 연결됨
-
-    try {
-      const success = await onRetry()
-      if (!success) {
-        _retryTimer = setTimeout(attempt, intervalMs)
-      } else {
-        _retryTimer = null
-      }
-    } catch {
-      _retryTimer = setTimeout(attempt, intervalMs)
+    if (config.autoConnect) {
+      await this.connect()
     }
   }
 
-  _retryTimer = setTimeout(attempt, intervalMs)
-}
+  /** 서버 연결 시도 */
+  async connect(url?: string, username?: string, password?: string): Promise<boolean> {
+    if (url) this.serverUrl = url
+    if (!this.serverUrl) return false
 
-/** 재연결 타이머 취소 */
-function _cancelRetry(): void {
-  if (_retryTimer !== null) {
-    clearTimeout(_retryTimer)
-    _retryTimer = null
+    this.clearRetry()
+
+    try {
+      // 서버 health 확인 (3초 타임아웃)
+      const healthy = await ServerConnectionService.healthCheck(this.serverUrl)
+      if (!healthy) {
+        log.warn('[ModeManager] 서버 응답 없음 → 오프라인 유지')
+        this.setMode('offline')
+        this.scheduleRetry()
+        return false
+      }
+
+      // 로그인 (username/password 제공 시)
+      if (username && password) {
+        const success = await ServerConnectionService.login(this.serverUrl, username, password)
+        if (!success) {
+          log.warn('[ModeManager] 로그인 실패')
+          return false
+        }
+      }
+
+      // 연결 성공
+      this.setMode('connected')
+      log.info('[ModeManager] 커넥티드 모드 전환 완료')
+
+      // Presence 온라인 알림
+      PresenceService.start(this.serverUrl)
+
+      return true
+    } catch (err) {
+      log.error('[ModeManager] 연결 실패:', err)
+      this.setMode('offline')
+      this.scheduleRetry()
+      return false
+    }
+  }
+
+  /** 서버 연결 해제 */
+  async disconnect(): Promise<void> {
+    this.clearRetry()
+
+    try {
+      PresenceService.stop()
+      await ServerConnectionService.logout()
+    } catch { /* 무시 */ }
+
+    this.setMode('offline')
+    log.info('[ModeManager] 오프라인 모드 전환')
+  }
+
+  /** 재시도 예약 */
+  private scheduleRetry(): void {
+    if (this.retryTimer) return
+    this.retryTimer = setTimeout(async () => {
+      this.retryTimer = null
+      log.info('[ModeManager] 서버 재연결 시도...')
+      await this.connect()
+    }, this.retryIntervalMs)
+  }
+
+  /** 재시도 취소 */
+  private clearRetry(): void {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+  }
+
+  /** 모드 변경 + Renderer에 알림 */
+  private setMode(newMode: AppMode): void {
+    const changed = this.mode !== newMode
+    this.mode = newMode
+
+    if (changed) {
+      // 모든 BrowserWindow에 모드 변경 알림
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('server:mode-changed', { mode: newMode })
+      }
+    }
+  }
+
+  /** 정리 (앱 종료 시) */
+  async cleanup(): Promise<void> {
+    this.clearRetry()
+    if (this.isConnected()) {
+      try {
+        PresenceService.stop()
+        await ServerConnectionService.logout()
+      } catch { /* 무시 */ }
+    }
   }
 }
 
-/** 앱 종료 시 정리 */
-export function cleanup(): void {
-  _cancelRetry()
-  _mode = 'offline'
-  _user = null
-}
+/** 싱글턴 */
+export const modeManager = new ModeManager()

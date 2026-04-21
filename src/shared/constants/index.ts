@@ -4,8 +4,8 @@
  */
 
 // 앱 기본 설정
-export const APP_NAME = 'VaultLine Local'
-export const APP_ID = 'com.vaultline.local'
+export const APP_NAME = 'VaultLine'
+export const APP_ID = 'com.vaultline.lite'
 
 // 기본 데이터 경로 (실행 시 app.getPath로 실제 경로 결정)
 export const DEFAULT_DATA_DIR_NAME = 'DocVaultLocal'

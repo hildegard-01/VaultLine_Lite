@@ -1,71 +1,59 @@
-import * as ModeManager from './ModeManager'
-import { getAxiosInstance } from './ServerConnectionService'
-import { SERVER_HEARTBEAT_INTERVAL_MS } from '@shared/constants'
-
 /**
- * PresenceService — 온라인 상태 heartbeat 관리
+ * PresenceService — heartbeat (60초 간격)
  *
- * 역할:
- * - 커넥티드 모드에서 60초마다 서버에 heartbeat POST 전송
- * - 서버는 180초 이내 heartbeat 미수신 시 해당 사용자를 오프라인으로 표시
- * - 연결 실패 시 ModeManager.setOffline() + scheduleRetry()
- *
- * 구성:
- * - start(): heartbeat 타이머 시작
- * - stop(): heartbeat 타이머 정지
- * - sendHeartbeat(): 단일 heartbeat 전송
+ * 역할: 서버에 주기적으로 온라인 상태를 알립니다.
  */
 
-let _timer: ReturnType<typeof setInterval> | null = null
+import log from 'electron-log'
+import { ServerConnectionService } from './ServerConnectionService'
 
-/** heartbeat 시작 — 커넥티드 모드 전환 시 호출 */
-export function start(): void {
-  stop() // 중복 방지
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
-  const intervalMs = ModeManager.getServerConfig()?.heartbeatIntervalSec
-    ? (ModeManager.getServerConfig()!.heartbeatIntervalSec * 1_000)
-    : SERVER_HEARTBEAT_INTERVAL_MS
+export const PresenceService = {
+  /** heartbeat 시작 */
+  start(_serverUrl?: string): void {
+    this.stop()
 
-  _timer = setInterval(async () => {
-    if (!ModeManager.isConnected()) {
-      stop()
-      return
+    // 즉시 온라인 알림
+    this.sendOnline()
+
+    // 60초 간격 heartbeat
+    heartbeatTimer = setInterval(() => {
+      this.sendHeartbeat()
+    }, 60000)
+
+    log.info('[Presence] heartbeat 시작 (60초 간격)')
+  },
+
+  /** heartbeat 중지 + 오프라인 알림 */
+  stop(): void {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = null
     }
-    await sendHeartbeat()
-  }, intervalMs)
-}
+    this.sendOffline()
+  },
 
-/** heartbeat 정지 — 오프라인 전환 / 앱 종료 시 호출 */
-export function stop(): void {
-  if (_timer !== null) {
-    clearInterval(_timer)
-    _timer = null
-  }
-}
-
-/** 단일 heartbeat 전송 */
-export async function sendHeartbeat(): Promise<void> {
-  try {
-    const instance = getAxiosInstance()
-    await instance.post('/presence/heartbeat')
-  } catch (error) {
-    // heartbeat 실패 → 오프라인 전환 + 재연결 예약
-    stop()
-    ModeManager.setOffline()
-
-    // 재연결 시도: ServerConnectionService를 동적 import하여 순환 참조 방지
-    const { autoConnect } = await import('./ServerConnectionService')
-    const serverUrl = ModeManager.getStatus().serverUrl
-    if (serverUrl) {
-      ModeManager.scheduleRetry(async () => {
-        const reachable = await autoConnect(serverUrl)
-        return reachable
-      })
+  async sendHeartbeat(): Promise<void> {
+    try {
+      const client = ServerConnectionService.getClient()
+      await client.post('/presence/heartbeat')
+    } catch (err) {
+      log.warn('[Presence] heartbeat 실패:', (err as Error).message)
     }
-  }
-}
+  },
 
-/** heartbeat 실행 여부 */
-export function isRunning(): boolean {
-  return _timer !== null
+  async sendOnline(): Promise<void> {
+    try {
+      const client = ServerConnectionService.getClient()
+      await client.post('/presence/online')
+    } catch { /* 무시 */ }
+  },
+
+  async sendOffline(): Promise<void> {
+    try {
+      const client = ServerConnectionService.getClient()
+      await client.post('/presence/offline')
+    } catch { /* 무시 */ }
+  },
 }

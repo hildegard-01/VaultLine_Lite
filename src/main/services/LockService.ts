@@ -1,7 +1,7 @@
 import { getDatabase } from './DatabaseService'
 import type { LockEntry, LockRule } from '@shared/types/ipc'
-import * as ModeManager from './server/ModeManager'
-import { syncActivity } from './server/MetadataSyncService'
+import { modeManager } from './server/ModeManager'
+import { MetadataSyncService } from './server/MetadataSyncService'
 
 /**
  * LockService — 보호 잠금 관리 (REQ-023, REQ-024)
@@ -64,7 +64,7 @@ export function toggleLock(
     }
 
     // 서버 동기화 훅 (Phase C)
-    if (ModeManager.isConnected()) syncActivity(repoId, 'file.unlock', filePath).catch(() => {})
+    if (modeManager.isConnected()) MetadataSyncService.pushActivity('file.unlock', filePath).catch(() => {})
 
     return { locked: false }
   } else {
@@ -90,7 +90,7 @@ export function toggleLock(
     }
 
     // 서버 동기화 훅 (Phase C)
-    if (ModeManager.isConnected()) syncActivity(repoId, 'file.lock', `${filePath}: ${reason}`).catch(() => {})
+    if (modeManager.isConnected()) MetadataSyncService.pushActivity('file.lock', `${filePath}: ${reason}`).catch(() => {})
 
     return { locked: true }
   }

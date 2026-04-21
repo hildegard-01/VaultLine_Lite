@@ -180,6 +180,10 @@ export interface SharedUser {
   permission: 'r' | 'rw'
   isActive: boolean
   createdAt: string
+  // Phase U — 관리자 UI 지원
+  status?: 'active' | 'locked' | 'inactive'
+  lastLoginAt?: string | null
+  failedLoginCount?: number
 }
 
 export interface Invitation {
@@ -272,6 +276,14 @@ export interface IpcChannelMap {
   'repo:update': { req: { id: number } & Partial<Repository>; res: Repository }
   'repo:delete': { req: { id: number }; res: void }
   'repo:stats': { req: { id: number }; res: { fileCount: number; totalSize: number; revisions: number } }
+  'repo:admin-list': { req: void; res: Array<{ id: number; name: string; description: string; quotaBytes: number | null; usedBytes: number; fileCount: number; revisions: number; status: string; pendingDeletionAt: string | null; createdAt: string; lastAccessed: string | null }> }
+  'repo:set-quota': { req: { id: number; quotaBytes: number | null }; res: void }
+  'repo:mark-deletion': { req: { id: number }; res: { pendingDeletionAt: string } }
+  'repo:cancel-deletion': { req: { id: number }; res: void }
+
+  // 시스템 (Phase U)
+  'system:health-check': { req: void; res: { svn: { ok: boolean; version?: string }; libreoffice: { ok: boolean; path?: string }; svnserve: { ok: boolean; running: boolean }; watcher: { ok: boolean } } }
+  'system:info-full': { req: void; res: { version: string; electron: string; node: string; chrome: string; platform: string; arch: string; osRelease: string; uptime: number; dbSizeBytes: number; dataDir: string } }
 
   // 파일
   'file:list': { req: FileListRequest; res: FileEntry[] }
@@ -285,6 +297,8 @@ export interface IpcChannelMap {
   'file:restore-version': { req: { repoId: number; path: string; targetRevision: number; commitMessage: string }; res: { revision: number } }
   'file:restore-deleted': { req: { repoId: number; trashItemId: number; commitMessage: string }; res: { revision: number } }
   'file:upload-version': { req: { repoId: number; filePath: string; srcPath: string; commitMessage: string }; res: { revision: number } }
+  'file:bulk-move': { req: { repoId: number; srcPaths: string[]; destFolder: string; commitMessage: string }; res: { moved: number } }
+  'file:cross-repo-move': { req: { srcRepoId: number; destRepoId: number; srcPaths: string[]; destFolder: string; commitMessage: string }; res: { moved: number } }
 
   // 커밋
   'commit:log': { req: CommitLogRequest; res: CommitLogEntry[] }
@@ -313,6 +327,11 @@ export interface IpcChannelMap {
   'bookmark:list': { req: void; res: Array<{ id: number; repoId: number; filePath: string; alias: string | null; displayOrder: number; createdAt: string }> }
   'bookmark:toggle': { req: { repoId: number; filePath: string }; res: { added: boolean } }
   'bookmark:check': { req: { repoId: number; filePath: string }; res: boolean }
+
+  // 활동 로그
+  'activity:list': { req: { repoId?: number; action?: string; limit?: number; offset?: number }; res: Array<{ id: number; repoId: number | null; repoName: string | null; action: string; filePath: string | null; revision: number | null; username: string | null; detail: string | null; createdAt: string }> }
+  'activity:stats': { req: { days?: number }; res: { totalCount: number; topAction: string | null; topUser: string | null; actionTypes: number } }
+  'activity:export-csv': { req: { repoId?: number; action?: string; startDate?: string; endDate?: string }; res: { csv: string } }
 
   // 휴지통
   'trash:list': { req: { repoId?: number }; res: Array<{ id: number; repoId: number; repoName: string; filePath: string; deletedRevision: number; originalSize: number; deletedAt: string; expiresAt: string | null }> }
@@ -350,10 +369,11 @@ export interface IpcChannelMap {
   'settings:repo-update': { req: { repoId: number } & Partial<RepoSettings>; res: RepoSettings }
   'settings:disk-usage': { req: void; res: { used: number; total: number } }
   'settings:app-info': { req: void; res: { version: string; electron: string; node: string } }
+  'settings:reset-category': { req: { category: 'general' | 'security' | 'file' | 'trash' | 'notification' }; res: AppSettings }
 
   // 백업 (Phase 10)
-  'backup:create': { req: void; res: BackupEntry }
-  'backup:restore': { req: { id: string }; res: void }
+  'backup:create': { req: { includeDB?: boolean; includeSVN?: boolean } | void; res: BackupEntry }
+  'backup:restore': { req: { id: string; includeDB?: boolean; includeSVN?: boolean }; res: void }
   'backup:list': { req: void; res: BackupEntry[] }
   'backup:delete': { req: { id: string }; res: void }
 
@@ -371,8 +391,9 @@ export interface IpcChannelMap {
   // 공유 사용자 (Phase 11)
   'shared-user:list': { req: { repoId: number }; res: SharedUser[] }
   'shared-user:create': { req: { repoId: number; username: string; displayName: string; password: string; permission: 'r' | 'rw' }; res: SharedUser }
-  'shared-user:update': { req: { id: number; displayName?: string; password?: string; permission?: 'r' | 'rw'; isActive?: boolean }; res: SharedUser }
+  'shared-user:update': { req: { id: number; displayName?: string; password?: string; permission?: 'r' | 'rw'; isActive?: boolean; status?: 'active' | 'locked' | 'inactive' }; res: SharedUser }
   'shared-user:delete': { req: { id: number }; res: void }
+  'shared-user:reset-password': { req: { id: number; newPassword: string }; res: void }
 
   // 초대 (Phase 11)
   'invitation:create': { req: { repoId: number; sharedUserId: number; expiryMinutes?: number; oneTime?: boolean }; res: { invitation: Invitation; link: string } }
@@ -393,4 +414,10 @@ export interface IpcChannelMap {
   'svn-lock:lock': { req: { repoId: number; repoType: 'local' | 'remote'; path: string; comment?: string }; res: void }
   'svn-lock:unlock': { req: { repoId: number; repoType: 'local' | 'remote'; path: string }; res: void }
   'svn-lock:list': { req: { repoId: number; repoType: 'local' | 'remote' }; res: SvnLockEntry[] }
+
+  // 서버 연동 (Phase C)
+  'server:connect': { req: { url: string; username: string; password: string }; res: { connected: boolean; mode: string; user: { userId: number; username: string; role: string } | null } }
+  'server:disconnect': { req: void; res: { mode: string } }
+  'server:status': { req: void; res: { mode: string; connected: boolean; serverUrl: string; user: { userId: number; username: string; role: string } | null } }
+  'server:isConnected': { req: void; res: boolean }
 }

@@ -16,11 +16,11 @@ const migrations: Record<number, MigrationFn> = {
   2: (db) => {
     db.exec(CREATE_SERVER_SYNC_QUEUE_SQL)
   },
-  // 버전 2 → 3: search_metadata에 file_name, commit_message 컬럼 추가 (LIKE 검색 폴백용)
+  // 버전 2 → 3: search_metadata 컬럼 추가 + 관리자 UI 지원 컬럼 추가
   3: (db) => {
+    // search_metadata에 file_name, commit_message 컬럼 추가 (LIKE 검색 폴백용)
     try { db.exec(`ALTER TABLE search_metadata ADD COLUMN file_name TEXT DEFAULT ''`) } catch { /* 이미 존재 */ }
     try { db.exec(`ALTER TABLE search_metadata ADD COLUMN commit_message TEXT DEFAULT ''`) } catch { /* 이미 존재 */ }
-    // search_index(FTS5)에서 기존 데이터를 search_metadata로 백필
     try {
       db.exec(`
         UPDATE search_metadata SET
@@ -29,7 +29,20 @@ const migrations: Record<number, MigrationFn> = {
         WHERE file_name = '' OR file_name IS NULL
       `)
     } catch { /* 폴백 무시 */ }
+    // 관리자 UI 지원 컬럼 추가
+    addColumnIfMissing(db, 'repositories', 'quota_bytes', 'INTEGER')
+    addColumnIfMissing(db, 'repositories', 'pending_deletion_at', 'DATETIME')
+    addColumnIfMissing(db, 'shared_users', 'status', "TEXT DEFAULT 'active'")
+    addColumnIfMissing(db, 'shared_users', 'last_login_at', 'DATETIME')
+    addColumnIfMissing(db, 'shared_users', 'failed_login_count', 'INTEGER DEFAULT 0')
   }
+}
+
+/** 컬럼이 없을 때만 추가 (멱등성 보장) */
+function addColumnIfMissing(db: Database.Database, table: string, column: string, typeClause: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (cols.some(c => c.name === column)) return
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${typeClause}`)
 }
 
 /** 현재 DB의 스키마 버전을 조회 */

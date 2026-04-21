@@ -4,8 +4,6 @@ import { getDatabase } from './DatabaseService'
 import * as SvnService from './SvnService'
 import { getLockStatus, applyAutoLockRules } from './LockService'
 import type { Repository, CommitLogEntry, CommitLogRequest } from '@shared/types/ipc'
-import * as ModeManager from './server/ModeManager'
-import { pushCommitMetaFull } from './server/RepoSyncService'
 
 /**
  * CommitService — 커밋/이력/Diff 서비스
@@ -119,15 +117,16 @@ export async function uploadAndCommit(
     applyAutoLockRules(repoId, relPath)
   }
 
-  // 서버 동기화 훅 (Phase C) — 커넥티드 모드일 때만 실행
-  if (ModeManager.isConnected()) {
-    const changedFiles = filePaths.map(f => ({
-      action: 'A' as const,
-      path: targetPath ? `${targetPath}/${basename(f)}` : basename(f),
-      size: 0
-    }))
-    pushCommitMetaFull(repoId, finalRevision, commitMessage, changedFiles, repo.wcPath, repo.svnPath).catch(() => {})
-  }
+  // 서버 동기화 hook (커넥티드 모드일 때만)
+  try {
+    const { RepoSyncService } = require('./server/RepoSyncService')
+    RepoSyncService.pushCommit({
+      repoId, revision: finalRevision, author: 'local',
+      message: commitMessage, date: new Date().toISOString(),
+      changedFiles: filePaths.map(f => ({ action: 'A', path: targetPath ? `${targetPath}/${basename(f)}` : basename(f), size: 0 })),
+      fileTreeSnapshot: [],
+    })
+  } catch { /* 서버 미연결 시 무시 */ }
 
   return { revision: finalRevision }
 }
@@ -166,12 +165,6 @@ export async function uploadNewVersion(
 
   // 자동 잠금 규칙 적용
   applyAutoLockRules(repoId, filePath)
-
-  // 서버 동기화 훅 (Phase C)
-  if (ModeManager.isConnected()) {
-    const changedFiles = [{ action: 'M' as const, path: filePath, size: 0 }]
-    pushCommitMetaFull(repoId, revision, commitMessage, changedFiles, repo.wcPath, repo.svnPath).catch(() => {})
-  }
 
   return { revision }
 }

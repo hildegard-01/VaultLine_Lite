@@ -46,7 +46,7 @@ export function registerSvnServeHandlers(): void {
 
   // 공유 사용자 수정
   handleIpc('shared-user:update', (args) => {
-    const { id, ...updates } = args as { id: number; displayName?: string; password?: string; permission?: 'r' | 'rw'; isActive?: boolean }
+    const { id, ...updates } = args as { id: number; displayName?: string; password?: string; permission?: 'r' | 'rw'; isActive?: boolean; status?: 'active' | 'locked' | 'inactive' }
     return SharedUserService.updateUser(id, updates)
   })
 
@@ -54,5 +54,11 @@ export function registerSvnServeHandlers(): void {
   handleIpc('shared-user:delete', (args) => {
     const { id } = args as { id: number }
     SharedUserService.deleteUser(id)
+  })
+
+  // 공유 사용자 비밀번호 재설정 (Phase U)
+  handleIpc('shared-user:reset-password', (args) => {
+    const { id, newPassword } = args as { id: number; newPassword: string }
+    SharedUserService.updateUser(id, { password: newPassword })
   })
 }

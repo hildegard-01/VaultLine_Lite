@@ -65,8 +65,14 @@ export function registerIpcHandlers(): void {
   // 동기화 + SVN 잠금 (Phase 11)
   registerSyncHandlers()
 
+  // 활동 로그
+  registerActivityHandlers()
+
   // 서버 연동 (Phase C)
   registerServerHandlers()
+
+  // 시스템 정보 — 관리자 화면용 (Phase U)
+  registerSystemHandlers()
 
   // 다이얼로그 — Electron 네이티브 파일 선택
   handleIpc('dialog:open-file', async () => {
@@ -114,4 +120,6 @@ import { registerSettingsHandlers } from './settings.ipc'
 import { registerSvnServeHandlers } from './svnserve.ipc'
 import { registerInvitationHandlers } from './invitation.ipc'
 import { registerSyncHandlers } from './sync.ipc'
+import { registerActivityHandlers } from './activity.ipc'
 import { registerServerHandlers } from './server.ipc'
+import { registerSystemHandlers } from './system.ipc'

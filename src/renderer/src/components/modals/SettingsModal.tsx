@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@renderer/services/ipcClient'
-import { useMode } from '@renderer/hooks/useMode'
 import type { AppSettings, BackupEntry } from '@shared/types/ipc'
 
 /**
@@ -317,123 +316,96 @@ function BackupTab() {
 // ─── 서버 연결 탭 ───
 
 function ServerTab() {
-  const { connected, user, serverUrl, refresh } = useMode()
-  const [url, setUrl] = useState('')
+  const [serverUrl, setServerUrl] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
+  const [status, setStatus] = useState<{ connected: boolean; mode: string; user: any } | null>(null)
+  const [error, setError] = useState('')
 
-  const handleConnect = async (): Promise<void> => {
-    if (!url.trim() || !username.trim() || !password.trim()) {
-      setError('서버 URL, 아이디, 비밀번호를 모두 입력하세요.')
+  // 초기 상태 조회
+  useEffect(() => {
+    invoke('server:status').then((s: any) => {
+      setStatus(s)
+      if (s.serverUrl) setServerUrl(s.serverUrl)
+    }).catch(() => {})
+  }, [])
+
+  const handleConnect = async () => {
+    if (!serverUrl.trim() || !username.trim() || !password.trim()) {
+      setError('서버 URL, 사용자명, 비밀번호를 입력하세요.')
       return
     }
-    setError(null)
-    setLoading(true)
+    setConnecting(true)
+    setError('')
     try {
-      await invoke('server:connect' as any, { serverUrl: url.trim(), username: username.trim(), password })
-      refresh()
-      setPassword('')
+      const result = await invoke('server:connect', { url: serverUrl.trim(), username: username.trim(), password }) as any
+      setStatus(result)
+      if (!result.connected) {
+        setError('서버 연결 또는 로그인에 실패했습니다.')
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '서버 연결에 실패했습니다.')
+      setError(err instanceof Error ? err.message : '연결 실패')
     } finally {
-      setLoading(false)
+      setConnecting(false)
     }
   }
 
-  const handleDisconnect = async (): Promise<void> => {
-    if (!window.confirm('서버 연결을 해제하시겠습니까?')) return
-    setLoading(true)
+  const handleDisconnect = async () => {
     try {
-      await invoke('server:disconnect' as any)
-      refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '연결 해제 실패')
-    } finally {
-      setLoading(false)
-    }
+      await invoke('server:disconnect')
+      setStatus({ connected: false, mode: 'offline', user: null })
+    } catch {}
   }
 
-  // 커넥티드 상태일 때
-  if (connected && user) {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3">
-          <p className="text-[11px] text-green-700 dark:text-green-400 font-semibold">서버 연결됨</p>
-          <p className="text-[11px] text-green-600 dark:text-green-500 mt-0.5">{serverUrl}</p>
-          <p className="text-[11px] text-green-600 dark:text-green-500">로그인: {user.username} ({user.role === 'admin' ? '관리자' : '사용자'})</p>
-        </div>
+  const isConnected = status?.connected
 
-        <div className="space-y-1.5 text-[11px] text-gray-500">
-          <p>• 커밋 메타데이터 자동 동기화</p>
-          <p>• 태그/잠금 상태 서버 반영</p>
-          <p>• 팀 알림 수신</p>
-          <p>• 서버 공유 링크 생성 가능</p>
-        </div>
-
-        <button
-          onClick={handleDisconnect}
-          disabled={loading}
-          className="px-4 py-1.5 text-[11px] font-semibold border border-red-200 text-red-500 rounded-md hover:bg-red-50 disabled:opacity-50 transition"
-        >
-          {loading ? '처리 중...' : '연결 해제'}
-        </button>
-      </div>
-    )
-  }
-
-  // 오프라인 상태 — 로그인 폼
   return (
     <div className="space-y-4">
-      <div>
-        <label className="text-[11px] font-semibold text-gray-500 block mb-1">서버 URL</label>
-        <input
-          type="text"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          placeholder="http://192.168.0.10:8080"
-          className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
-        />
-      </div>
-      <div>
-        <label className="text-[11px] font-semibold text-gray-500 block mb-1">아이디</label>
-        <input
-          type="text"
-          value={username}
-          onChange={e => setUsername(e.target.value)}
-          placeholder="사용자 아이디"
-          className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
-        />
-      </div>
-      <div>
-        <label className="text-[11px] font-semibold text-gray-500 block mb-1">비밀번호</label>
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
-          placeholder="비밀번호"
-          className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
-        />
+      {/* 연결 상태 표시 */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium ${
+        isConnected ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-50 text-gray-500 border border-gray-200'
+      }`}>
+        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
+        {isConnected ? `연결됨 — ${status.user?.username} (${status.user?.role})` : '오프라인'}
       </div>
 
-      {error && (
-        <p className="text-[11px] text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-md">{error}</p>
+      {!isConnected ? (
+        <>
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 block mb-1">서버 URL</label>
+            <input type="text" value={serverUrl} onChange={e => setServerUrl(e.target.value)}
+              placeholder="http://localhost:8080"
+              className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 block mb-1">사용자명</label>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+              placeholder="admin"
+              className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 block mb-1">비밀번호</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="비밀번호"
+              onKeyDown={e => { if (e.key === 'Enter') handleConnect() }}
+              className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800" />
+          </div>
+          {error && <p className="text-[11px] text-red-500">{error}</p>}
+          <button onClick={handleConnect} disabled={connecting}
+            className="px-4 py-1.5 text-[11px] font-semibold bg-navy text-white rounded-md hover:bg-navy-dark disabled:opacity-50">
+            {connecting ? '연결 중...' : '연결'}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-[11px] text-gray-500">서버: {status?.mode === 'connected' ? serverUrl : '-'}</p>
+          <button onClick={handleDisconnect}
+            className="px-4 py-1.5 text-[11px] font-semibold border border-red-200 text-red-500 rounded-md hover:bg-red-50">
+            연결 해제
+          </button>
+        </>
       )}
-
-      <button
-        onClick={handleConnect}
-        disabled={loading}
-        className="px-5 py-1.5 text-[11px] font-semibold bg-navy text-white rounded-md hover:bg-navy/90 disabled:opacity-50 transition"
-      >
-        {loading ? '연결 중...' : '연결'}
-      </button>
-
-      <p className="text-[10px] text-gray-400">
-        서버 연결 시 커밋 이력 동기화, 팀 공유, 알림 기능을 사용할 수 있습니다.
-        오프라인 상태에서도 모든 로컬 기능은 정상 동작합니다.
-      </p>
     </div>
   )
 }

@@ -16,7 +16,9 @@ export function listUsers(repoId: number): SharedUser[] {
   return db.prepare(`
     SELECT id, repo_id as repoId, username, display_name as displayName,
            password_plain as passwordPlain, permission,
-           is_active as isActive, created_at as createdAt
+           is_active as isActive, created_at as createdAt,
+           status, last_login_at as lastLoginAt,
+           failed_login_count as failedLoginCount
     FROM shared_users WHERE repo_id = ? ORDER BY created_at
   `).all(repoId) as SharedUser[]
 }
@@ -66,7 +68,10 @@ export function createUser(
 /** 사용자 수정 */
 export function updateUser(
   id: number,
-  updates: { displayName?: string; password?: string; permission?: 'r' | 'rw'; isActive?: boolean }
+  updates: {
+    displayName?: string; password?: string; permission?: 'r' | 'rw';
+    isActive?: boolean; status?: 'active' | 'locked' | 'inactive';
+  }
 ): SharedUser {
   const db = getDatabase()
 
@@ -80,6 +85,13 @@ export function updateUser(
   if (updates.password !== undefined) { sets.push('password_plain = ?'); values.push(updates.password) }
   if (updates.permission !== undefined) { sets.push('permission = ?'); values.push(updates.permission) }
   if (updates.isActive !== undefined) { sets.push('is_active = ?'); values.push(updates.isActive ? 1 : 0) }
+  if (updates.status !== undefined) {
+    sets.push('status = ?'); values.push(updates.status)
+    // 잠김 상태 해제 시 실패 카운터 리셋
+    if (updates.status === 'active') {
+      sets.push('failed_login_count = 0')
+    }
+  }
 
   if (sets.length > 0) {
     values.push(id)
@@ -93,7 +105,9 @@ export function updateUser(
   return db.prepare(`
     SELECT id, repo_id as repoId, username, display_name as displayName,
            password_plain as passwordPlain, permission,
-           is_active as isActive, created_at as createdAt
+           is_active as isActive, created_at as createdAt,
+           status, last_login_at as lastLoginAt,
+           failed_login_count as failedLoginCount
     FROM shared_users WHERE id = ?
   `).get(id) as SharedUser
 }

@@ -61,7 +61,7 @@ export function search(req: SearchRequest): SearchResult[] {
     }>
     console.log('[Search] 결과 수:', rows.length)
 
-    return rows.map((row) => ({
+    const results = rows.map((row) => ({
       repoId: row.repo_id,
       repoName: row.repo_name,
       filePath: row.file_path,
@@ -69,10 +69,14 @@ export function search(req: SearchRequest): SearchResult[] {
       snippet: row.snippet || '',
       revision: row.revision
     }))
-  } catch (e) {
-    console.error('[Search] FTS5 쿼리 오류:', e)
-    return []
+
+    if (results.length > 0) return results
+  } catch {
+    // FTS5 쿼리 오류 시 LIKE 폴백으로 진행
   }
+
+  // FTS5에서 결과 없으면 LIKE 폴백
+  return searchFallback(req)
 }
 
 /** 전체 저장소 통합 검색 (FTS5 → LIKE 폴백) */
@@ -131,6 +135,59 @@ export function reindexRepo(repoId: number): { indexed: number } {
   // 실제 재인덱싱은 커밋 시 자동으로 이루어짐
   // 여기서는 기존 데이터만 정리
   return { indexed: 0 }
+}
+
+/** 타입별 LIKE 폴백 검색 */
+function searchFallback(req: SearchRequest): SearchResult[] {
+  const db = getDatabase()
+  const pattern = `%${req.query}%`
+  const limit = SEARCH_MAX_RESULTS
+
+  let where: string
+  if (req.type === 'filename') {
+    where = 'si.file_name LIKE ?'
+  } else if (req.type === 'commit') {
+    where = 'si.commit_message LIKE ?'
+  } else {
+    where = '(si.file_name LIKE ? OR si.commit_message LIKE ?)'
+  }
+
+  const repoFilter = req.repoId ? ' AND si.repo_id = ?' : ''
+
+  const sql = `
+    SELECT si.repo_id, r.name as repo_name, si.file_path, si.revision,
+           si.file_name, si.commit_message
+    FROM search_index si
+    JOIN repositories r ON r.id = si.repo_id
+    WHERE ${where}${repoFilter}
+    LIMIT ?
+  `
+
+  const params: unknown[] = []
+  if (req.type === 'filename' || req.type === 'commit') {
+    params.push(pattern)
+  } else {
+    params.push(pattern, pattern)
+  }
+  if (req.repoId) params.push(req.repoId)
+  params.push(limit)
+
+  try {
+    const rows = db.prepare(sql).all(...params) as Array<{
+      repo_id: number; repo_name: string; file_path: string; revision: number; file_name: string; commit_message: string
+    }>
+
+    return rows.map(row => ({
+      repoId: row.repo_id,
+      repoName: row.repo_name,
+      filePath: row.file_path,
+      matchType: req.type || (row.file_name?.toLowerCase().includes(req.query.toLowerCase()) ? 'filename' : 'commit') as 'filename' | 'commit' | 'content',
+      snippet: req.type === 'commit' ? (row.commit_message || '') : (row.file_name || ''),
+      revision: row.revision
+    }))
+  } catch {
+    return []
+  }
 }
 
 /** FTS5 매치 쿼리 구성 */

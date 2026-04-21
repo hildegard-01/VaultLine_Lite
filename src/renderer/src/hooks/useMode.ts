@@ -1,80 +1,92 @@
-import { useState, useEffect, useCallback } from 'react'
-
 /**
- * useMode — 오프라인/커넥티드 모드 상태 훅
+ * 오프라인/커넥티드 모드 상태 훅
  *
- * 역할:
- * - IPC server:status를 폴링하여 현재 모드 반환
- * - connected, user, isAdmin, serverUrl 상태 제공
- * - server:notification IPC 이벤트 수신 → onNotification 콜백
- *
- * 구성:
- * - connected: 커넥티드 모드 여부
- * - user: 현재 로그인 사용자 정보
- * - isAdmin: 관리자 여부
- * - serverUrl: 서버 URL
- * - refresh(): 수동 상태 갱신
+ * 역할: 현재 앱의 연결 모드(offline/connected)를 제공합니다.
+ *       server:status IPC를 10초마다 폴링하여 최신 상태를 유지합니다.
  */
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { invoke } from '@renderer/services/ipcClient';
 
-export interface ModeUser {
-  id: number
-  username: string
-  role: string
+export type AppMode = 'offline' | 'connected';
+
+export interface ConnectedUser {
+  id: number;
+  userId: number;
+  username: string;
+  role: string;
 }
 
-export interface ModeState {
-  connected: boolean
-  user: ModeUser | null
-  isAdmin: boolean
-  serverUrl: string | null
-  refresh: () => void
+interface ModeContextValue {
+  mode: AppMode;
+  connected: boolean;
+  user: ConnectedUser | null;
+  serverUrl: string | null;
+  isAdmin: boolean;
+  setMode: (mode: AppMode) => void;
+  refresh: () => void;
 }
 
-const POLL_INTERVAL_MS = 10_000 // 10초 폴링
+const ModeContext = createContext<ModeContextValue | null>(null);
 
-export function useMode(): ModeState {
-  const [connected, setConnected] = useState(false)
-  const [user, setUser] = useState<ModeUser | null>(null)
-  const [serverUrl, setServerUrl] = useState<string | null>(null)
+export const ModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [mode, setModeState] = useState<AppMode>('offline');
+  const [user, setUser] = useState<ConnectedUser | null>(null);
+  const [serverUrl, setServerUrl] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
-      const status = await (window.api.invoke as Function)('server:status') as {
-        success: boolean
-        data: { mode: string; user: ModeUser | null; serverUrl: string | null }
+      const status = await invoke('server:status' as any) as any;
+      setModeState(status.mode === 'connected' ? 'connected' : 'offline');
+      if (status.user) {
+        setUser({ ...status.user, id: status.user.userId });
+      } else {
+        setUser(null);
       }
-      if (status.success && status.data) {
-        setConnected(status.data.mode === 'connected')
-        setUser(status.data.user)
-        setServerUrl(status.data.serverUrl)
-      }
+      setServerUrl(status.serverUrl ?? null);
     } catch {
-      // 폴링 실패 무시
+      // 오프라인 유지
     }
-  }, [])
+  }, []);
 
+  // 초기 로드 및 10초 폴링
   useEffect(() => {
-    fetchStatus()
-    const timer = setInterval(fetchStatus, POLL_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [fetchStatus])
+    fetchStatus();
+    const timer = setInterval(fetchStatus, 10000);
+    return () => clearInterval(timer);
+  }, [fetchStatus]);
 
-  // 서버 알림 이벤트 수신 → 미읽음 카운트 갱신 트리거
+  // Main Process에서 모드 변경 이벤트 수신
   useEffect(() => {
-    const handler = (): void => {
-      window.dispatchEvent(new CustomEvent('vaultline:notification-received'))
+    const api = (window as any).api;
+    if (api?.on) {
+      const unsubscribe = api.on('server:mode-changed', () => {
+        fetchStatus();
+      });
+      return unsubscribe;
     }
-    const unsubscribe = window.api.on('server:notification', handler)
-    return () => {
-      unsubscribe()
-    }
-  }, [])
+  }, [fetchStatus]);
 
-  return {
-    connected,
+  const setMode = useCallback((newMode: AppMode) => {
+    setModeState(newMode);
+  }, []);
+
+  const value: ModeContextValue = {
+    mode,
+    connected: mode === 'connected',
     user,
-    isAdmin: user?.role === 'admin',
     serverUrl,
-    refresh: fetchStatus
+    isAdmin: user?.role === 'admin',
+    setMode,
+    refresh: fetchStatus,
+  };
+
+  return React.createElement(ModeContext.Provider, { value }, children);
+};
+
+export const useMode = (): ModeContextValue => {
+  const ctx = useContext(ModeContext);
+  if (!ctx) {
+    throw new Error('useMode는 ModeProvider 내부에서 사용해야 합니다.');
   }
-}
+  return ctx;
+};

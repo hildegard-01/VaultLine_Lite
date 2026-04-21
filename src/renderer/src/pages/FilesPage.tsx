@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useParams, useOutletContext, useLocation } from 'react-router-dom'
+import { useParams, useOutletContext, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { invoke } from '@renderer/services/ipcClient'
-import { FileToolbar } from '@renderer/components/files/FileToolbar'
-import { FileTable } from '@renderer/components/files/FileTable'
-import { FileRightPanel } from '@renderer/components/files/FileRightPanel'
+import { FileToolbarV2 } from '@renderer/components/files/FileToolbarV2'
+import { FileTableV2 } from '@renderer/components/files/FileTableV2'
+import { FileRightPanelV2 } from '@renderer/components/files/FileRightPanelV2'
 import { DropZone } from '@renderer/components/files/DropZone'
 import { PendingChangesBar } from '@renderer/components/files/PendingChangesBar'
 import { CommitModal } from '@renderer/components/modals/CommitModal'
@@ -20,6 +20,7 @@ export function FilesPage(): React.JSX.Element {
   const context = useOutletContext<{ showRightPanel: boolean }>()
   const queryClient = useQueryClient()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null)
   const [currentPath, setCurrentPathRaw] = useState('')
@@ -451,12 +452,6 @@ export function FilesPage(): React.JSX.Element {
     }
   }, [checkedPaths, numRepoId, queryClient])
 
-  // 단일 파일 이동
-  const handleMove = useCallback((file: FileEntry) => {
-    setMoveTarget(file)
-    setMoveBulkPaths([])
-  }, [])
-
   // 일괄 이동
   const handleBulkMove = useCallback(() => {
     const paths = Array.from(checkedPaths)
@@ -611,16 +606,16 @@ export function FilesPage(): React.JSX.Element {
           </div>
         )}
 
-        <FileToolbar
+        <FileToolbarV2
           itemCount={tagFilter ? tagFilterFiles.length : files.length}
           checkedCount={checkedPaths.size}
           onUpload={handleUpload}
           onNewFolder={handleNewFolder}
           onLockRules={() => setShowLockRules(true)}
           onBulkDelete={handleBulkDelete}
+          onBulkMove={handleBulkMove}
           onBulkLock={handleBulkLock}
           onBulkShare={handleBulkShare}
-          onBulkMove={handleBulkMove}
           onClearChecked={() => setCheckedPaths(new Set())}
         />
         <PendingChangesBar
@@ -630,7 +625,7 @@ export function FilesPage(): React.JSX.Element {
           onCommitFile={handleCommitSingleFile}
           onDiscardFile={handleDiscardSingleFile}
         />
-        <FileTable
+        <FileTableV2
           files={tagFilter
             ? tagFilterFiles
                 .filter(tf => tf.repoId === numRepoId)
@@ -660,7 +655,7 @@ export function FilesPage(): React.JSX.Element {
       </div>
 
       {context?.showRightPanel && (
-        <FileRightPanel
+        <FileRightPanelV2
           file={selectedFile}
           repoId={numRepoId}
           recentCommits={commits}
@@ -668,11 +663,12 @@ export function FilesPage(): React.JSX.Element {
           onLockToggle={handleLockToggle}
           onShare={setShareFile}
           onDelete={handleDelete}
-          onMove={handleMove}
           onPreview={setPreviewFile}
           onRestoreVersion={handleRestoreVersion}
           onClearSelection={() => setSelectedFile(null)}
           onTagsChanged={() => setTagVersion(v => v + 1)}
+          onDetail={(file) => navigate(`/file/${repoId}?path=${encodeURIComponent(file.path)}`)}
+          onUploadNewVersion={handleUpload}
         />
       )}
 

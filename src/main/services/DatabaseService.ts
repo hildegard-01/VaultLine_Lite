@@ -28,7 +28,7 @@ function getDataDir(): string {
 }
 
 /** DB 파일 경로 */
-function getDbPath(): string {
+export function getDbPath(): string {
   const dataDir = getDataDir()
   return join(dataDir, DB_FILENAME)
 }
