@@ -29,7 +29,8 @@ export function createUser(
   username: string,
   displayName: string,
   password: string,
-  permission: 'r' | 'rw' = 'rw'
+  permission: 'r' | 'rw' = 'rw',
+  filePath?: string
 ): SharedUser {
   const db = getDatabase()
 
@@ -40,9 +41,9 @@ export function createUser(
   if (existing) throw new Error(`이미 존재하는 사용자입니다: ${username}`)
 
   const result = db.prepare(`
-    INSERT INTO shared_users (repo_id, username, display_name, password_plain, permission)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(repoId, username, displayName, password, permission)
+    INSERT INTO shared_users (repo_id, username, display_name, password_plain, permission, file_path)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(repoId, username, displayName, password, permission, filePath ?? null)
 
   // passwd/authz 재생성
   regenerateAuthFiles(repoId)

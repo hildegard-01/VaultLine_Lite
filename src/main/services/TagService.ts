@@ -135,6 +135,122 @@ export function applyAutoTags(repoId: number, filePath: string): void {
   }
 }
 
+/** 복수 태그 검색 (AND/OR 모드) */
+export function getFilesByTags(tagIds: number[], mode: 'and' | 'or'): Array<{ repoId: number; repoName: string; filePath: string; fileSize: number; modifiedAt: string }> {
+  if (tagIds.length === 0) return []
+  const db = getDatabase()
+  const placeholders = tagIds.map(() => '?').join(', ')
+
+  let rows: Array<{ repoId: number; repoName: string; wcPath: string; filePath: string }>
+  if (mode === 'and') {
+    rows = db.prepare(`
+      SELECT ft.repo_id as repoId, r.name as repoName, r.wc_path as wcPath, ft.file_path as filePath
+      FROM file_tags ft
+      JOIN repositories r ON r.id = ft.repo_id
+      WHERE ft.tag_id IN (${placeholders}) AND r.status = 'active'
+      GROUP BY ft.repo_id, ft.file_path
+      HAVING COUNT(DISTINCT ft.tag_id) = ?
+      ORDER BY r.name, ft.file_path
+    `).all(...tagIds, tagIds.length) as typeof rows
+  } else {
+    rows = db.prepare(`
+      SELECT DISTINCT ft.repo_id as repoId, r.name as repoName, r.wc_path as wcPath, ft.file_path as filePath
+      FROM file_tags ft
+      JOIN repositories r ON r.id = ft.repo_id
+      WHERE ft.tag_id IN (${placeholders}) AND r.status = 'active'
+      ORDER BY r.name, ft.file_path
+    `).all(...tagIds) as typeof rows
+  }
+
+  const { join } = require('path')
+  const { statSync, existsSync } = require('fs')
+  return rows.map(row => {
+    let fileSize = 0, modifiedAt = ''
+    try {
+      const fullPath = join(row.wcPath, row.filePath)
+      if (existsSync(fullPath)) {
+        const stat = statSync(fullPath)
+        fileSize = stat.size
+        modifiedAt = stat.mtime.toISOString()
+      }
+    } catch { /* 무시 */ }
+    return { repoId: row.repoId, repoName: row.repoName, filePath: row.filePath, fileSize, modifiedAt }
+  })
+}
+
+/** 태그별 파일 수 맵 */
+export function getTagCounts(): Record<number, number> {
+  const db = getDatabase()
+  const rows = db.prepare('SELECT tag_id, COUNT(*) as cnt FROM file_tags GROUP BY tag_id').all() as Array<{ tag_id: number; cnt: number }>
+  const result: Record<number, number> = {}
+  for (const row of rows) result[row.tag_id] = row.cnt
+  return result
+}
+
+/** 자동 태그 규칙 활성화/비활성화 */
+export function toggleTagRule(id: number, isActive: boolean): void {
+  const db = getDatabase()
+  db.prepare('UPDATE tag_rules SET is_active = ? WHERE id = ?').run(isActive ? 1 : 0, id)
+}
+
+/** 기존 파일 전체에 활성 자동 태그 규칙 소급 적용 */
+export function applyAutoTagsRetroactive(): { applied: number } {
+  const db = getDatabase()
+  const rules = db.prepare(
+    'SELECT tag_id, pattern_type, pattern FROM tag_rules WHERE is_active = 1'
+  ).all() as Array<{ tag_id: number; pattern_type: string; pattern: string }>
+
+  if (rules.length === 0) return { applied: 0 }
+
+  const repos = db.prepare(
+    "SELECT id, wc_path FROM repositories WHERE status = 'active'"
+  ).all() as Array<{ id: number; wc_path: string }>
+
+  const insert = db.prepare('INSERT OR IGNORE INTO file_tags (repo_id, file_path, tag_id) VALUES (?, ?, ?)')
+
+  let applied = 0
+  const tx = db.transaction(() => {
+    for (const repo of repos) {
+      const files = _collectWcFiles(repo.wc_path)
+      for (const filePath of files) {
+        for (const rule of rules) {
+          if (matchesRule(filePath, rule.pattern_type, rule.pattern)) {
+            const r = insert.run(repo.id, filePath, rule.tag_id)
+            if (r.changes > 0) applied++
+          }
+        }
+      }
+    }
+  })
+  tx()
+
+  return { applied }
+}
+
+/** WC 디렉토리 내 파일 상대 경로 목록 수집 */
+function _collectWcFiles(wcPath: string, current: string = wcPath, depth = 0): string[] {
+  if (depth > 10) return []
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { readdirSync, statSync } = require('fs') as typeof import('fs')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { join, relative } = require('path') as typeof import('path')
+  const files: string[] = []
+  try {
+    for (const entry of readdirSync(current)) {
+      if (entry === '.svn') continue
+      const fullPath = join(current, entry)
+      try {
+        if (statSync(fullPath).isDirectory()) {
+          files.push(..._collectWcFiles(wcPath, fullPath, depth + 1))
+        } else {
+          files.push(relative(wcPath, fullPath).replace(/\\/g, '/'))
+        }
+      } catch { /* 건너뜀 */ }
+    }
+  } catch { /* 건너뜀 */ }
+  return files
+}
+
 /** 규칙 매칭 */
 function matchesRule(filePath: string, patternType: string, pattern: string): boolean {
   switch (patternType) {

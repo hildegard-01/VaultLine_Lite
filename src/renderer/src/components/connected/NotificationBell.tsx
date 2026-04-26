@@ -47,13 +47,11 @@ export function NotificationBell(): React.JSX.Element {
     }
   }
 
-  // 초기 로드 + 알림 이벤트 수신 시 갱신
+  // 초기 로드 + WS 알림 이벤트 수신 시 갱신
   useEffect(() => {
     fetchUnreadCount()
-
-    const handler = (): void => { fetchUnreadCount() }
-    window.addEventListener('vaultline:notification-received', handler)
-    return () => window.removeEventListener('vaultline:notification-received', handler)
+    const unsub = window.api.on('server:notification', () => fetchUnreadCount())
+    return unsub
   }, [])
 
   const handleOpen = (): void => {

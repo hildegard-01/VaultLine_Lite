@@ -10,6 +10,11 @@ files:
   - '!docs/*'
   - '!{.eslintrc.cjs,.prettierrc,electron.vite.config.ts}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+extraResources:
+  - from: resources/svn
+    to: svn
+    filter:
+      - '**/*'
 asarUnpack:
   - resources/**
 win:

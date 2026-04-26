@@ -1,283 +1,432 @@
 /**
- * AdminUsers — 사용자 관리 (와이어프레임 섹션 15, P2P shared-user 기반)
+ * AdminUsers — 서버 사용자 관리 (시스템 관리자 전용)
  *
- * 역할: Lite 오프라인 환경의 사용자 관리 = P2P 저장소별 공유 사용자 관리.
- *       저장소를 선택하면 해당 저장소의 사용자 목록 + 추가/수정/상태변경/비번 변경.
- * 구성: AdminUsers (메인) / 저장소 셀렉터 / 사용자 테이블 / 추가 모달 / 비번 변경 모달
+ * 역할: 서버 JWT 사용자 목록 조회, 생성, 상태 변경(잠금 해제 포함),
+ *       비밀번호 초기화, 강제 로그아웃, 삭제.
  *
- * 연동 IPC: repo:list, shared-user:list/create/update/delete/reset-password
+ * 연동 IPC: admin:user-list/create/update/delete/reset-password/force-logout
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@renderer/services/ipcClient';
 import { colors } from '@renderer/design/theme';
 import { page, card, table, btn, formatDate } from './adminStyles';
-import type { SharedUser } from '@shared/types/ipc';
+import type { CSSProperties } from 'react';
+
+interface ServerUser {
+  id: number
+  username: string
+  display_name: string | null
+  email: string | null
+  role: string
+  status: string
+  is_online: boolean
+  last_seen: string | null
+  created_at: string
+}
 
 export default function AdminUsers() {
   const qc = useQueryClient();
-  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [passwordTarget, setPasswordTarget] = useState<SharedUser | null>(null);
+  const [editingUser, setEditingUser] = useState<ServerUser | null>(null);
+  const [tempPassword, setTempPassword] = useState<{ username: string; pw: string } | null>(null);
 
-  const { data: repos = [] } = useQuery({
-    queryKey: ['repo:list'],
-    queryFn: () => invoke('repo:list'),
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin:user-list', search],
+    queryFn: () => invoke('admin:user-list' as any, { skip: 0, limit: 100, search: search || undefined }),
   });
 
-  // 기본 저장소 자동 선택
-  useEffect(() => {
-    if (selectedRepoId == null && repos.length > 0) {
-      setSelectedRepoId(repos[0].id);
-    }
-  }, [repos, selectedRepoId]);
+  const users: ServerUser[] = (data as any)?.items ?? [];
+  const total: number = (data as any)?.total ?? 0;
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin:user-list'] });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['shared-user:list', selectedRepoId],
-    queryFn: () => invoke('shared-user:list', { repoId: selectedRepoId! }),
-    enabled: selectedRepoId != null,
-  });
+  const activeCount = users.filter(u => u.status === 'active').length;
+  const lockedCount = users.filter(u => u.status === 'locked').length;
+  const inactiveCount = users.filter(u => u.status === 'inactive').length;
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ['shared-user:list', selectedRepoId] });
-
-  // 통계
-  const active = users.filter(u => (u.status ?? 'active') === 'active').length;
-  const locked = users.filter(u => u.status === 'locked').length;
-  const inactive = users.filter(u => u.status === 'inactive').length;
-
-  const handleSetStatus = async (id: number, status: 'active' | 'locked' | 'inactive') => {
+  const handleStatusChange = async (userId: number, status: string) => {
     try {
-      await invoke('shared-user:update', { id, status });
+      await invoke('admin:user-update' as any, { userId, status });
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : '상태 변경 실패');
     }
   };
 
-  const handleDelete = async (u: SharedUser) => {
-    if (!window.confirm(`"${u.displayName}" 사용자를 삭제하시겠습니까?`)) return;
+  const handleDelete = async (u: ServerUser) => {
+    if (!window.confirm(`"${u.display_name || u.username}" 계정을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) return;
     try {
-      await invoke('shared-user:delete', { id: u.id });
+      await invoke('admin:user-delete' as any, { userId: u.id });
       refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : '삭제 실패');
     }
   };
 
+  const handleResetPassword = async (u: ServerUser) => {
+    if (!window.confirm(`"${u.display_name || u.username}"의 비밀번호를 초기화하시겠습니까?\n\n임시 비밀번호가 발급되고 기존 세션은 모두 만료됩니다.`)) return;
+    try {
+      const result = await invoke('admin:user-reset-password' as any, { userId: u.id }) as any;
+      setTempPassword({ username: u.display_name || u.username, pw: result.temp_password });
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '비밀번호 초기화 실패');
+    }
+  };
+
+  const handleForceLogout = async (u: ServerUser) => {
+    if (!window.confirm(`"${u.display_name || u.username}"을(를) 강제 로그아웃하시겠습니까?`)) return;
+    try {
+      await invoke('admin:user-force-logout' as any, { userId: u.id });
+      refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '강제 로그아웃 실패');
+    }
+  };
+
+  const statusBadge = (status: string, isOnline: boolean) => {
+    if (status === 'locked') return <span style={{ color: colors.red, fontWeight: 700 }}>● 잠김</span>;
+    if (status === 'inactive') return <span style={{ color: colors.textMuted, fontWeight: 600 }}>● 비활성</span>;
+    return (
+      <span style={{ color: isOnline ? colors.green : colors.textSub, fontWeight: 600 }}>
+        ● {isOnline ? '온라인' : '활성'}
+      </span>
+    );
+  };
+
   return (
     <div style={page.root}>
       <h1 style={page.title}>👥 사용자 관리</h1>
-      <p style={page.desc}>
-        P2P 공유에 사용되는 저장소별 사용자 계정을 관리합니다.
-        (Lite 오프라인 모드 — 전체 계정 관리는 서버 연결 시 지원)
-      </p>
+      <p style={page.desc}>서버에 등록된 사용자 계정을 관리합니다.</p>
 
-      {/* 저장소 셀렉터 + 통계 */}
+      {/* 통계 + 검색 + 추가 버튼 */}
       <div style={{ ...card.root, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <label style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginBottom: 4 }}>저장소</label>
-          <select
-            value={selectedRepoId ?? ''}
-            onChange={(e) => setSelectedRepoId(Number(e.target.value))}
-            style={{ padding: '6px 10px', fontSize: 13, border: `1px solid ${colors.border}`, borderRadius: 4, minWidth: 200 }}
-          >
-            {repos.length === 0 && <option>저장소 없음</option>}
-            {repos.map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
+          <span><strong>{total}</strong>명 전체</span>
+          <span style={{ color: colors.green }}>활성 {activeCount}</span>
+          <span style={{ color: colors.red }}>잠김 {lockedCount}</span>
+          <span style={{ color: colors.textMuted }}>비활성 {inactiveCount}</span>
         </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
-          <div><strong>{users.length}</strong> 명 전체</div>
-          <div style={{ color: colors.green }}>활성 {active}</div>
-          <div style={{ color: colors.orange }}>잠김 {locked}</div>
-          <div style={{ color: colors.textMuted }}>비활성 {inactive}</div>
-        </div>
-        <div style={{ flex: 1 }} />
-        <button
-          style={btn.primary}
-          onClick={() => setShowCreate(true)}
-          disabled={selectedRepoId == null}
-        >
-          ＋ 사용자 추가
-        </button>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="사용자명 · 이름 · 이메일 검색"
+          style={{
+            flex: 1, minWidth: 200, padding: '6px 10px', fontSize: 13,
+            border: `1px solid ${colors.border}`, borderRadius: 4,
+          }}
+        />
+        <button style={btn.primary} onClick={() => setShowCreate(true)}>＋ 사용자 추가</button>
       </div>
 
       {/* 사용자 테이블 */}
       <div style={card.root}>
-        <table style={table.root}>
-          <thead>
-            <tr>
-              <th style={table.th}>사용자 ID</th>
-              <th style={table.th}>표시 이름</th>
-              <th style={table.th}>권한</th>
-              <th style={table.th}>상태</th>
-              <th style={table.th}>실패 횟수</th>
-              <th style={table.th}>마지막 로그인</th>
-              <th style={{ ...table.th, width: 260 }}>작업</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => {
-              const st = u.status ?? 'active';
-              const stColor = st === 'active' ? colors.green : st === 'locked' ? colors.orange : colors.textMuted;
-              const stLabel = st === 'active' ? '활성' : st === 'locked' ? '잠김' : '비활성';
-              return (
+        {isLoading ? (
+          <div style={{ textAlign: 'center', padding: 40, color: colors.textMuted }}>불러오는 중...</div>
+        ) : (
+          <table style={table.root}>
+            <thead>
+              <tr>
+                <th style={table.th}>사용자명</th>
+                <th style={table.th}>표시 이름</th>
+                <th style={table.th}>이메일</th>
+                <th style={table.th}>역할</th>
+                <th style={table.th}>상태</th>
+                <th style={table.th}>마지막 접속</th>
+                <th style={{ ...table.th, width: 280 }}>작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
                 <tr key={u.id}>
-                  <td style={table.td}><code>{u.username}</code></td>
-                  <td style={table.td}>{u.displayName}</td>
-                  <td style={table.td}>{u.permission === 'rw' ? '읽기/쓰기' : '읽기'}</td>
+                  <td style={table.td}><code style={{ fontSize: 12 }}>{u.username}</code></td>
+                  <td style={table.td}>{u.display_name || '—'}</td>
+                  <td style={table.td} ><span style={{ fontSize: 12, color: colors.textSub }}>{u.email || '—'}</span></td>
                   <td style={table.td}>
-                    <span style={{ color: stColor, fontWeight: 600 }}>● {stLabel}</span>
-                  </td>
-                  <td style={table.td}>
-                    <span style={{ color: (u.failedLoginCount ?? 0) > 0 ? colors.orange : colors.textMuted }}>
-                      {u.failedLoginCount ?? 0}회
+                    <span style={{
+                      padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                      background: u.role === 'admin' ? '#fff0f0' : '#f0f4ff',
+                      color: u.role === 'admin' ? colors.red : colors.blue,
+                    }}>
+                      {u.role === 'admin' ? '관리자' : '일반'}
                     </span>
                   </td>
-                  <td style={table.td}>{formatDate(u.lastLoginAt)}</td>
+                  <td style={table.td}>{statusBadge(u.status, u.is_online)}</td>
+                  <td style={table.td}><span style={{ fontSize: 12 }}>{formatDate(u.last_seen)}</span></td>
                   <td style={table.td}>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      <button
-                        style={{ ...btn.ghost, ...btn.small }}
-                        onClick={() => setPasswordTarget(u)}
-                      >
-                        비밀번호
-                      </button>
-                      {st !== 'active' && (
-                        <button
-                          style={{ ...btn.ghost, ...btn.small, color: colors.green, borderColor: colors.greenBg }}
-                          onClick={() => handleSetStatus(u.id, 'active')}
-                        >
-                          활성화
-                        </button>
-                      )}
-                      {st === 'active' && (
-                        <button
-                          style={{ ...btn.ghost, ...btn.small, color: colors.orange, borderColor: colors.orangeBg }}
-                          onClick={() => handleSetStatus(u.id, 'locked')}
-                        >
-                          잠금
-                        </button>
-                      )}
-                      <button
-                        style={{ ...btn.danger, ...btn.small }}
-                        onClick={() => handleDelete(u)}
-                      >
-                        삭제
-                      </button>
-                    </div>
+                    <ActionButtons
+                      user={u}
+                      onEdit={setEditingUser}
+                      onStatusChange={handleStatusChange}
+                      onResetPassword={handleResetPassword}
+                      onForceLogout={handleForceLogout}
+                      onDelete={handleDelete}
+                    />
                   </td>
                 </tr>
-              );
-            })}
-            {users.length === 0 && (
-              <tr>
-                <td colSpan={7} style={{ ...table.td, textAlign: 'center', color: colors.textMuted, padding: 48 }}>
-                  {selectedRepoId == null ? '저장소를 먼저 선택하세요.' : '사용자가 없습니다.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ))}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ ...table.td, textAlign: 'center', color: colors.textMuted, padding: 48 }}>
+                    {search ? '검색 결과가 없습니다.' : '사용자가 없습니다.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {showCreate && selectedRepoId != null && (
+      {showCreate && (
         <CreateUserModal
-          repoId={selectedRepoId}
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); refresh(); }}
         />
       )}
 
-      {passwordTarget && (
-        <PasswordModal
-          user={passwordTarget}
-          onClose={() => setPasswordTarget(null)}
-          onChanged={() => { setPasswordTarget(null); refresh(); }}
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSaved={() => { setEditingUser(null); refresh(); }}
+        />
+      )}
+
+      {tempPassword && (
+        <TempPasswordModal
+          username={tempPassword.username}
+          tempPassword={tempPassword.pw}
+          onClose={() => setTempPassword(null)}
         />
       )}
     </div>
   );
 }
 
+/* ────────────────────── 작업 버튼 그룹 ────────────────────── */
+
+function ActionButtons({ user, onEdit, onStatusChange, onResetPassword, onForceLogout, onDelete }: {
+  user: ServerUser
+  onEdit: (u: ServerUser) => void
+  onStatusChange: (id: number, status: string) => void
+  onResetPassword: (u: ServerUser) => void
+  onForceLogout: (u: ServerUser) => void
+  onDelete: (u: ServerUser) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <button
+        style={{ ...btn.ghost, ...btn.small, color: colors.blue }}
+        onClick={() => onEdit(user)}
+      >
+        수정
+      </button>
+      {/* 잠금 해제 — locked 상태에서 강조 표시 */}
+      {user.status === 'locked' && (
+        <button
+          style={{ ...btn.ghost, ...btn.small, color: colors.green, borderColor: '#c8f0d8', background: '#f0faf4', fontWeight: 700 }}
+          onClick={() => onStatusChange(user.id, 'active')}
+          title="로그인 잠금 해제"
+        >
+          🔓 잠금 해제
+        </button>
+      )}
+      {/* 활성화 — inactive 상태 */}
+      {user.status === 'inactive' && (
+        <button
+          style={{ ...btn.ghost, ...btn.small, color: colors.blue, borderColor: colors.blueBg }}
+          onClick={() => onStatusChange(user.id, 'active')}
+        >
+          활성화
+        </button>
+      )}
+      {/* 비활성화 — active 상태 */}
+      {user.status === 'active' && (
+        <button
+          style={{ ...btn.ghost, ...btn.small, color: colors.textMuted }}
+          onClick={() => onStatusChange(user.id, 'inactive')}
+        >
+          비활성화
+        </button>
+      )}
+      <button
+        style={{ ...btn.ghost, ...btn.small }}
+        onClick={() => onResetPassword(user)}
+        title="임시 비밀번호 발급"
+      >
+        비번 초기화
+      </button>
+      {user.is_online && (
+        <button
+          style={{ ...btn.ghost, ...btn.small, color: colors.orange }}
+          onClick={() => onForceLogout(user)}
+        >
+          강제 로그아웃
+        </button>
+      )}
+      <button
+        style={{ ...btn.danger, ...btn.small }}
+        onClick={() => onDelete(user)}
+      >
+        삭제
+      </button>
+    </div>
+  );
+}
+
+/* ────────────────────── 사용자 수정 모달 ────────────────────── */
+
+function EditUserModal({ user, onClose, onSaved }: { user: ServerUser; onClose: () => void; onSaved: () => void }) {
+  const [displayName, setDisplayName] = useState(user.display_name || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [role, setRole] = useState<'user' | 'admin'>(user.role as 'user' | 'admin');
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await invoke('admin:user-update' as any, {
+        userId: user.id,
+        display_name: displayName.trim() || null,
+        email: email.trim() || null,
+        role,
+      });
+      onSaved();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '수정 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ModalFrame title={`사용자 수정 — ${user.username}`} onClose={onClose}>
+      <div style={{ marginBottom: 10, padding: '6px 10px', background: '#f5f7fa', borderRadius: 4, fontSize: 12, color: colors.textSub }}>
+        사용자명(ID)은 변경할 수 없습니다: <code>{user.username}</code>
+      </div>
+      <Field label="표시 이름" value={displayName} onChange={setDisplayName} placeholder="홍길동" />
+      <Field label="이메일" value={email} onChange={setEmail} placeholder="user@example.com" type="email" />
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginBottom: 4 }}>역할</label>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as 'user' | 'admin')}
+          style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: `1px solid ${colors.border}`, borderRadius: 4 }}
+        >
+          <option value="user">일반 사용자</option>
+          <option value="admin">관리자</option>
+        </select>
+      </div>
+      <ModalButtons onClose={onClose} primaryLabel={loading ? '저장 중...' : '저장'} onPrimary={handleSave} disabled={loading} />
+    </ModalFrame>
+  );
+}
+
 /* ────────────────────── 사용자 추가 모달 ────────────────────── */
 
-function CreateUserModal({
-  repoId, onClose, onCreated,
-}: { repoId: number; onClose: () => void; onCreated: () => void }) {
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [permission, setPermission] = useState<'r' | 'rw'>('rw');
+  const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
-    if (!username.trim() || !displayName.trim() || !password.trim()) {
-      alert('모든 필드를 입력하세요.');
+    if (!username.trim() || !password.trim()) {
+      alert('사용자명과 비밀번호는 필수입니다.');
       return;
     }
+    setLoading(true);
     try {
-      await invoke('shared-user:create', {
-        repoId, username: username.trim(), displayName: displayName.trim(),
-        password, permission,
+      await invoke('admin:user-create' as any, {
+        username: username.trim(),
+        display_name: displayName.trim() || undefined,
+        email: email.trim() || undefined,
+        password,
+        role,
       });
       onCreated();
     } catch (err) {
       alert(err instanceof Error ? err.message : '사용자 추가 실패');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <ModalFrame title="사용자 추가" onClose={onClose}>
-      <Field label="사용자 ID" value={username} onChange={setUsername} placeholder="user01" mono />
+      <Field label="사용자명 *" value={username} onChange={setUsername} placeholder="user01" mono />
       <Field label="표시 이름" value={displayName} onChange={setDisplayName} placeholder="홍길동" />
-      <Field label="비밀번호" value={password} onChange={setPassword} placeholder="" type="password" />
+      <Field label="이메일" value={email} onChange={setEmail} placeholder="user@example.com" type="email" />
+      <Field label="비밀번호 * (8자 이상)" value={password} onChange={setPassword} type="password" />
       <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginBottom: 4 }}>권한</label>
+        <label style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginBottom: 4 }}>역할</label>
         <select
-          value={permission}
-          onChange={(e) => setPermission(e.target.value as 'r' | 'rw')}
+          value={role}
+          onChange={(e) => setRole(e.target.value as 'user' | 'admin')}
           style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: `1px solid ${colors.border}`, borderRadius: 4 }}
         >
-          <option value="rw">읽기/쓰기</option>
-          <option value="r">읽기 전용</option>
+          <option value="user">일반 사용자</option>
+          <option value="admin">관리자</option>
         </select>
       </div>
-      <ModalButtons onClose={onClose} primaryLabel="추가" onPrimary={handleCreate} />
+      <ModalButtons onClose={onClose} primaryLabel={loading ? '추가 중...' : '추가'} onPrimary={handleCreate} disabled={loading} />
     </ModalFrame>
   );
 }
 
-/* ────────────────────── 비밀번호 변경 모달 ────────────────────── */
+/* ────────────────────── 임시 비밀번호 표시 모달 ────────────────────── */
 
-function PasswordModal({
-  user, onClose, onChanged,
-}: { user: SharedUser; onClose: () => void; onChanged: () => void }) {
-  const [newPassword, setNewPassword] = useState('');
+function TempPasswordModal({ username, tempPassword, onClose }: {
+  username: string
+  tempPassword: string
+  onClose: () => void
+}) {
+  const [copied, setCopied] = useState(false);
 
-  const handleChange = async () => {
-    if (!newPassword.trim()) { alert('새 비밀번호를 입력하세요.'); return; }
-    try {
-      await invoke('shared-user:reset-password', { id: user.id, newPassword });
-      onChanged();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '비밀번호 변경 실패');
-    }
+  const handleCopy = () => {
+    navigator.clipboard.writeText(tempPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const pwBoxStyle: CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8,
+    background: '#f5f7fa', borderRadius: 6, padding: '10px 14px',
+    marginBottom: 12, border: `1px solid ${colors.border}`,
   };
 
   return (
-    <ModalFrame title="비밀번호 변경" onClose={onClose}>
-      <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 12px' }}>
-        대상: <strong>{user.displayName}</strong> ({user.username})
+    <ModalFrame title="임시 비밀번호 발급 완료" onClose={onClose}>
+      <p style={{ fontSize: 13, color: colors.textSub, margin: '0 0 12px' }}>
+        <strong>{username}</strong>의 임시 비밀번호가 발급되었습니다.<br />
+        사용자에게 전달 후 즉시 변경을 안내하세요.
       </p>
-      <Field label="새 비밀번호" value={newPassword} onChange={setNewPassword} type="password" />
-      <ModalButtons onClose={onClose} primaryLabel="변경" onPrimary={handleChange} />
+      <div style={pwBoxStyle}>
+        <code style={{ flex: 1, fontSize: 15, fontWeight: 700, letterSpacing: 1, color: colors.navy }}>
+          {tempPassword}
+        </code>
+        <button
+          style={{ ...btn.ghost, ...btn.small, color: copied ? colors.green : colors.blue }}
+          onClick={handleCopy}
+        >
+          {copied ? '복사됨' : '복사'}
+        </button>
+      </div>
+      <p style={{ fontSize: 11, color: colors.red, margin: '0 0 16px' }}>
+        ※ 이 창을 닫으면 임시 비밀번호를 다시 확인할 수 없습니다.
+      </p>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button style={btn.primary} onClick={onClose}>확인</button>
+      </div>
     </ModalFrame>
   );
 }
 
-/* ────────────────────── 공통 모달 헬퍼 ────────────────────── */
+/* ────────────────────── 공통 UI 헬퍼 ────────────────────── */
 
 function ModalFrame({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -290,7 +439,7 @@ function ModalFrame({ title, onClose, children }: { title: string; onClose: () =
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 8, padding: 24, width: 420, border: `1px solid ${colors.border}` }}
+        style={{ background: '#fff', borderRadius: 8, padding: 24, width: 440, border: `1px solid ${colors.border}` }}
       >
         <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>{title}</h3>
         {children}
@@ -299,9 +448,10 @@ function ModalFrame({ title, onClose, children }: { title: string; onClose: () =
   );
 }
 
-function Field({
-  label, value, onChange, placeholder, type, mono,
-}: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; mono?: boolean }) {
+function Field({ label, value, onChange, placeholder, type, mono }: {
+  label: string; value: string; onChange: (v: string) => void
+  placeholder?: string; type?: string; mono?: boolean
+}) {
   return (
     <div style={{ marginBottom: 12 }}>
       <label style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginBottom: 4 }}>{label}</label>
@@ -321,13 +471,15 @@ function Field({
   );
 }
 
-function ModalButtons({
-  onClose, primaryLabel, onPrimary,
-}: { onClose: () => void; primaryLabel: string; onPrimary: () => void }) {
+function ModalButtons({ onClose, primaryLabel, onPrimary, disabled }: {
+  onClose: () => void; primaryLabel: string; onPrimary: () => void; disabled?: boolean
+}) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
       <button style={btn.ghost} onClick={onClose}>취소</button>
-      <button style={btn.primary} onClick={onPrimary}>{primaryLabel}</button>
+      <button style={{ ...btn.primary, opacity: disabled ? 0.6 : 1 }} onClick={onPrimary} disabled={disabled}>
+        {primaryLabel}
+      </button>
     </div>
   );
 }

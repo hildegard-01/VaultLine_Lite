@@ -10,12 +10,13 @@ import log from 'electron-log'
 
 /** 메모리 전용 토큰 저장소 */
 let accessToken = ''
-let refreshToken = ''
+let refreshTokenValue = ''
 let currentUserId = 0
 let currentUsername = ''
 let currentRole = ''
 let serverBaseUrl = ''
 let httpClient: AxiosInstance | null = null
+
 
 function getClient(): AxiosInstance {
   if (!httpClient) throw new Error('서버에 연결되지 않았습니다.')
@@ -42,7 +43,7 @@ function createClient(baseUrl: string): AxiosInstance {
     (res) => res,
     async (error) => {
       const originalRequest = error.config
-      if (error.response?.status === 401 && !originalRequest._retry && refreshToken) {
+      if (error.response?.status === 401 && !originalRequest._retry && refreshTokenValue) {
         originalRequest._retry = true
         const renewed = await renewToken()
         if (renewed) {
@@ -59,24 +60,100 @@ function createClient(baseUrl: string): AxiosInstance {
 
 /** 토큰 갱신 */
 async function renewToken(): Promise<boolean> {
-  if (!refreshToken || !httpClient) return false
+  if (!refreshTokenValue || !serverBaseUrl) return false
   try {
-    const res = await axios.post(`${serverBaseUrl}/auth/refresh`, {
-      refresh_token: refreshToken,
-    }, { timeout: 5000 })
+    const res = await axios.post(
+      `${serverBaseUrl}/auth/refresh`,
+      { refresh_token: refreshTokenValue },
+      { timeout: 5000 }
+    )
     accessToken = res.data.access_token
-    refreshToken = res.data.refresh_token
+    if (res.data.refresh_token) refreshTokenValue = res.data.refresh_token
     log.info('[서버연결] 토큰 갱신 완료')
     return true
   } catch {
     log.warn('[서버연결] 토큰 갱신 실패 → 재로그인 필요')
     accessToken = ''
-    refreshToken = ''
+    refreshTokenValue = ''
     return false
   }
 }
 
 export const ServerConnectionService = {
+  /** 토큰 강제 갱신 (WS 재연결 등 외부에서 직접 호출) */
+  renewToken,
+
+  /** 저장된 refreshToken으로 자동 로그인 (세션 복원) */
+  async loginWithRefreshToken(baseUrl: string, storedRefreshToken: string, fallbackUsername: string): Promise<boolean> {
+    try {
+      serverBaseUrl = baseUrl
+      httpClient = createClient(baseUrl)
+      refreshTokenValue = storedRefreshToken
+
+      const renewed = await renewToken()
+      if (!renewed) {
+        serverBaseUrl = ''
+        httpClient = null
+        refreshTokenValue = ''
+        return false
+      }
+
+      // 사용자 정보 조회
+      try {
+        const res = await httpClient!.get('/auth/me')
+        currentUserId = res.data.id ?? res.data.user_id ?? 0
+        currentUsername = res.data.username ?? fallbackUsername
+        currentRole = res.data.role ?? ''
+      } catch {
+        currentUsername = fallbackUsername
+        currentRole = ''
+      }
+
+      log.info(`[서버연결] 세션 복원 자동 로그인 성공: ${currentUsername}`)
+      return true
+    } catch (err) {
+      log.warn('[서버연결] 세션 복원 실패:', err)
+      accessToken = ''
+      refreshTokenValue = ''
+      serverBaseUrl = ''
+      httpClient = null
+      return false
+    }
+  },
+
+  /** 현재 Refresh Token 반환 (세션 저장용) */
+  getRefreshToken(): string {
+    return refreshTokenValue
+  },
+
+  /** 내 프로필 조회 */
+  async getMyProfile(): Promise<{ id: number; username: string; displayName: string | null; email: string | null; role: string }> {
+    const res = await getClient().get('/users/me')
+    return {
+      id: res.data.id ?? currentUserId,
+      username: res.data.username ?? currentUsername,
+      displayName: res.data.display_name ?? null,
+      email: res.data.email ?? null,
+      role: res.data.role ?? currentRole,
+    }
+  },
+
+  /** 내 프로필 수정 (표시 이름·이메일) */
+  async updateMyProfile(data: { displayName?: string; email?: string }): Promise<void> {
+    await getClient().patch('/users/me', {
+      display_name: data.displayName,
+      email: data.email,
+    })
+  },
+
+  /** 비밀번호 변경 */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await getClient().post('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+  },
+
   /** 서버 health 확인 */
   async healthCheck(baseUrl: string): Promise<boolean> {
     try {
@@ -95,12 +172,13 @@ export const ServerConnectionService = {
 
       const res = await httpClient.post('/auth/login', { username, password })
       accessToken = res.data.access_token
-      refreshToken = res.data.refresh_token
-      currentUserId = res.data.user_id
-      currentUsername = res.data.username
-      currentRole = res.data.role
+      // 서버 응답은 플랫 구조: { access_token, refresh_token, user_id, username, role, ... }
+      refreshTokenValue = res.data.refresh_token ?? ''
+      currentUserId = res.data.user_id ?? 0
+      currentUsername = res.data.username ?? username
+      currentRole = res.data.role ?? ''
 
-      log.info(`[서버연결] 로그인 성공: ${username} (${currentRole})`)
+      log.info(`[서버연결] 로그인 성공: ${currentUsername} (${currentRole})`)
       return true
     } catch (err: any) {
       const detail = err.response?.data?.detail
@@ -112,13 +190,13 @@ export const ServerConnectionService = {
 
   /** 로그아웃 */
   async logout(): Promise<void> {
-    if (httpClient && refreshToken) {
+    if (httpClient && refreshTokenValue) {
       try {
-        await httpClient.post('/auth/logout', { refresh_token: refreshToken })
+        await httpClient.post('/auth/logout', { refresh_token: refreshTokenValue })
       } catch { /* 무시 */ }
     }
     accessToken = ''
-    refreshToken = ''
+    refreshTokenValue = ''
     currentUserId = 0
     currentUsername = ''
     currentRole = ''

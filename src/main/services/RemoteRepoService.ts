@@ -90,7 +90,8 @@ export function listRemoteRepos(): RemoteRepo[] {
     SELECT id, display_name as displayName, svn_url as svnUrl, wc_path as wcPath,
            username, password_plain as passwordPlain, owner_name as ownerName,
            permission, connection_status as connectionStatus,
-           last_synced as lastSynced, created_at as createdAt
+           last_synced as lastSynced, created_at as createdAt,
+           server_share_id as serverShareId, file_path as filePath
     FROM remote_repos ORDER BY created_at
   `).all() as RemoteRepo[]
 }
@@ -118,6 +119,66 @@ export async function checkStatus(id: number): Promise<RemoteRepo> {
 
   db.prepare('UPDATE remote_repos SET connection_status = ? WHERE id = ?').run(status, id)
   return { ...repo, connectionStatus: status }
+}
+
+/** 서버 공유 수락 시 원격 저장소 직접 추가 (svnserve P2P) */
+export async function addFromServerShare(opts: {
+  svnserveUrl: string
+  svnUsername: string
+  svnPasswordPlain: string
+  permission: 'r' | 'rw'
+  ownerName: string | null
+  serverShareId: number
+  displayName: string
+  filePath?: string
+}): Promise<RemoteRepo> {
+  const wcBase = join(app.getPath('userData'), DEFAULT_WORKCOPIES_DIR, 'remote')
+  if (!existsSync(wcBase)) mkdirSync(wcBase, { recursive: true })
+  const wcPath = join(wcBase, `share-${opts.serverShareId}-${Date.now()}`)
+
+  // 항상 저장소 루트 체크아웃 — 단일 파일 필터링은 remote-repo:file-list에서 file_path 컬럼으로 처리
+  try {
+    await SvnService.checkoutWithAuth(opts.svnserveUrl, wcPath, opts.svnUsername, opts.svnPasswordPlain)
+  } catch (err) {
+    const svnMsg = err instanceof Error ? err.message : '알 수 없는 오류'
+    // E210002/E170013 = relay 연결 끊김. 구체적 이유는 svn_relay_error로 별도 수신
+    if (svnMsg.includes('E210002') || svnMsg.includes('E170013')) {
+      throw new Error('소유자 PC와의 SVN 릴레이 연결이 끊겼습니다.')
+    }
+    throw new Error(svnMsg)
+  }
+
+  const db = getDatabase()
+  const result = db.prepare(`
+    INSERT INTO remote_repos (display_name, svn_url, wc_path, username, password_plain,
+                              owner_name, permission, server_share_id, file_path, connection_status, last_synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'connected', CURRENT_TIMESTAMP)
+  `).run(
+    opts.displayName, opts.svnserveUrl, wcPath,
+    opts.svnUsername, opts.svnPasswordPlain,
+    opts.ownerName, opts.permission, opts.serverShareId, opts.filePath ?? null
+  )
+
+  db.prepare(`
+    INSERT INTO activity_log (action, detail, created_at)
+    VALUES ('sync.join', ?, CURRENT_TIMESTAMP)
+  `).run(`서버 공유 저장소 연결: ${opts.displayName}`)
+
+  return {
+    id: result.lastInsertRowid as number,
+    displayName: opts.displayName,
+    svnUrl: opts.svnserveUrl,
+    wcPath,
+    username: opts.svnUsername,
+    passwordPlain: opts.svnPasswordPlain,
+    ownerName: opts.ownerName,
+    permission: opts.permission,
+    connectionStatus: 'connected',
+    lastSynced: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    serverShareId: opts.serverShareId,
+    filePath: opts.filePath ?? null,
+  }
 }
 
 /** 원격 저장소 연결 해제 */

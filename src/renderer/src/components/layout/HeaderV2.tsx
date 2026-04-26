@@ -9,8 +9,9 @@
 import { type CSSProperties } from 'react';
 import { APP_NAME } from '@shared/constants';
 import { colors, layout, fontFamily } from '@renderer/design/theme';
-import { Search as SearchIcon, Bell as BellIcon, Settings as SettingsIcon } from '@renderer/design/Icons';
+import { Search as SearchIcon, Settings as SettingsIcon } from '@renderer/design/Icons';
 import { useMode } from '@renderer/hooks/useMode';
+import { NotificationBell } from '@renderer/components/connected/NotificationBell';
 
 /* ────────────────────── Props ────────────────────── */
 
@@ -221,17 +222,8 @@ export default function HeaderV2({
         <kbd style={S.kbd}>Ctrl+K</kbd>
       </button>
 
-      {/* 커넥티드 모드: 알림벨 (Phase C에서 기능 활성화) */}
-      {connected && (
-        <button
-          style={S.iconBtn}
-          title="알림"
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-        >
-          <BellIcon width={18} height={18} color="#fff" />
-        </button>
-      )}
+      {/* 커넥티드 모드: 알림벨 */}
+      {connected && <NotificationBell />}
 
       {/* 설정 */}
       <button

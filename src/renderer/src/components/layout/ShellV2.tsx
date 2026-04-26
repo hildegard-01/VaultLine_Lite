@@ -90,6 +90,13 @@ export default function ShellV2() {
   /* 검색 결과 선택 */
   const handleSearchSelect = (result: any) => {
     setShowSearch(false);
+
+    // 공유받은 문서 → 해당 공유 저장소 페이지로 이동
+    if (result.remoteRepoId) {
+      navigate(`/shared-repo/${result.remoteRepoId}`);
+      return;
+    }
+
     const parts = result.filePath.split('/');
     parts.pop();
     const parentPath = parts.join('/');

@@ -42,11 +42,41 @@ export function registerMetadataHandlers(): void {
     TagService.detachTag(repoId, filePath, tagId)
   })
 
-  // 태그별 파일 목록
+  // 태그별 파일 목록 (단일)
   handleIpc('tag:files', (args: unknown) => {
     const { tagId } = args as { tagId: number }
     return TagService.getFilesByTag(tagId)
   })
+
+  // 복수 태그 AND/OR 검색
+  handleIpc('tag:search', (args: unknown) => {
+    const { tagIds, mode } = args as { tagIds: number[]; mode: 'and' | 'or' }
+    return TagService.getFilesByTags(tagIds, mode ?? 'or')
+  })
+
+  // 태그별 파일 수 맵
+  handleIpc('tag:counts', () => TagService.getTagCounts())
+
+  // ═══ 자동 태그 규칙 ═══
+  handleIpc('tag:rule:list', () => TagService.listTagRules())
+
+  handleIpc('tag:rule:create', (args: unknown) => {
+    const { tagId, patternType, pattern } = args as { tagId: number; patternType: string; pattern: string }
+    return TagService.createTagRule(tagId, patternType, pattern)
+  })
+
+  handleIpc('tag:rule:delete', (args: unknown) => {
+    const { id } = args as { id: number }
+    TagService.deleteTagRule(id)
+  })
+
+  handleIpc('tag:rule:toggle', (args: unknown) => {
+    const { id, isActive } = args as { id: number; isActive: boolean }
+    TagService.toggleTagRule(id, isActive)
+  })
+
+  // 기존 파일에 소급 적용
+  handleIpc('tag:rule:apply-retroactive', () => TagService.applyAutoTagsRetroactive())
 
   // ═══ 즐겨찾기 (3개) ═══
   handleIpc('bookmark:list', () => BookmarkService.listBookmarks())

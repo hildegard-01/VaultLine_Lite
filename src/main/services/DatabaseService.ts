@@ -96,6 +96,10 @@ export function initDatabase(): Database.Database {
     }
   }
 
+  // 앱 재시작 시 임시 서버 공유 정리
+  // link 타입은 Express 서버(메모리)에 의존하므로 재시작하면 서버가 꺼진 상태
+  _db.prepare(`UPDATE shares SET is_active = 0 WHERE share_type = 'link' AND is_active = 1`).run()
+
   return _db
 }
 

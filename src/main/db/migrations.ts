@@ -35,7 +35,21 @@ const migrations: Record<number, MigrationFn> = {
     addColumnIfMissing(db, 'shared_users', 'status', "TEXT DEFAULT 'active'")
     addColumnIfMissing(db, 'shared_users', 'last_login_at', 'DATETIME')
     addColumnIfMissing(db, 'shared_users', 'failed_login_count', 'INTEGER DEFAULT 0')
-  }
+  },
+  // 버전 3 → 4: shares 테이블에 max_downloads 컬럼 추가 (링크별 다운로드 횟수 제한 DB 저장)
+  4: (db) => {
+    addColumnIfMissing(db, 'shares', 'max_downloads', 'INTEGER')
+  },
+  // 버전 4 → 5: 서버 공유 연동을 위한 server_share_id 컬럼 추가
+  5: (db) => {
+    addColumnIfMissing(db, 'shared_users', 'server_share_id', 'INTEGER')
+    addColumnIfMissing(db, 'remote_repos', 'server_share_id', 'INTEGER')
+  },
+  // 버전 5 → 6: 파일 경로 제한 공유 지원
+  6: (db) => {
+    addColumnIfMissing(db, 'shared_users', 'file_path', 'TEXT')
+    addColumnIfMissing(db, 'remote_repos', 'file_path', 'TEXT')
+  },
 }
 
 /** 컬럼이 없을 때만 추가 (멱등성 보장) */

@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { existsSync, statSync } from 'fs'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -7,6 +7,7 @@ import * as os from 'os'
 import { handleIpc } from './index'
 import { getSvnPath, getSvnEnv } from '../services/SvnPathHelper'
 import { getDbPath } from '../services/DatabaseService'
+import { getSessionExpiryDate, clearSession } from '../services/SessionService'
 
 /**
  * 시스템 정보 IPC 핸들러 (Phase U)
@@ -34,6 +35,38 @@ function findLibreOffice(): string | null {
 }
 
 export function registerSystemHandlers(): void {
+  // 로그인 후 창 크기 조정 (로그인 소형 → 메인 앱 전체)
+  handleIpc('system:resize-window', (args) => {
+    const { width, height } = args as { width: number; height: number }
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.setMinimumSize(900, 600)
+      win.setSize(width, height, true)
+      win.center()
+    }
+  })
+
+
+  // ─── 시작 프로그램 등록 ───
+  handleIpc('system:startup-get', () => {
+    const info = app.getLoginItemSettings()
+    return { openAtLogin: info.openAtLogin, openAsHidden: info.openAsHidden ?? false }
+  })
+
+  handleIpc('system:startup-set', (args: unknown) => {
+    const { openAtLogin, openAsHidden } = args as { openAtLogin: boolean; openAsHidden?: boolean }
+    app.setLoginItemSettings({ openAtLogin, openAsHidden: openAsHidden ?? false })
+  })
+
+  // ─── 세션 관리 ───
+  handleIpc('session:info', () => {
+    return { expiresAt: getSessionExpiryDate() }
+  })
+
+  handleIpc('session:clear', () => {
+    clearSession()
+  })
+
   // ─── 서비스 헬스체크 ───
   handleIpc('system:health-check', async () => {
     // SVN

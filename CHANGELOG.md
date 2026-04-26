@@ -6,6 +6,59 @@ VaultLine Lite 변경 이력입니다. [Keep a Changelog](https://keepachangelog
 
 ## [Unreleased]
 
+### 추가 (Phase F — 기능 보완 + 보안 강화)
+
+**태그 기능 전면 개선**
+- `TagsPage` 완전 재작성: 좌측 태그 목록(인라인 생성·수정·삭제) + 우측 탭(파일 검색 / 자동 규칙)
+- 복수 태그 AND/OR 검색 — 태그 칩 선택기 + 검색 모드 토글
+- 자동 태그 규칙 관리 — 확장자·경로·파일명 패턴, 활성/비활성 토글, 소급 적용(전체 WC 파일 대상)
+- 태그별 파일 수 배지 (`tag:counts` 실시간 반영)
+- `TagService` 확장: `getFilesByTags()`, `getTagCounts()`, `toggleTagRule()`, `applyAutoTagsRetroactive()`
+- 자동 태그를 커밋 흐름에 연결: `CommitService.uploadAndCommit/uploadNewVersion`, `FileWatcherService.commitPendingFiles` 에 `applyAutoTags()` 호출 추가 (기존 규칙 정의만 있고 실제 호출이 없던 버그 수정)
+- 사이드바 태그 섹션 제거 (TagsPage로 일원화)
+- 신규 IPC 7개: `tag:search`, `tag:counts`, `tag:rule:list/create/delete/toggle/apply-retroactive`
+
+**검색 확장 — 공유받은 문서 포함**
+- `SearchService.globalSearch()` — 공유받은 저장소(`remote_repos`) WC 파일도 결과에 포함
+- `SearchModal` — 공유 문서에 청록색 "공유" 배지 표시, 공유자(`ownerName`) 표시
+
+**사이드바 메뉴 수정**
+- 승인관리 메뉴 제거 → 공유관리(`/shares`) 복원
+
+**자동 로그인 + OS 세션 암호화**
+- `SessionService.ts` 신규: `safeStorage` (Windows DPAPI / macOS Keychain) 로 refresh token 암호화 저장
+- 앱 재시작 시 저장된 세션 자동 복원 (`ModeManager.initialize()` 에서 세션 확인 → `/auth/refresh` → 커넥티드 모드 자동 전환)
+- `ServerConnectionService.loginWithRefreshToken()` 신규 — 저장된 refresh token으로 재인증
+- 서버 연결 성공 시 세션 자동 저장, 연결 해제 시 세션 삭제
+- 신규 IPC: `session:info`, `session:clear`
+
+**시스템 통합**
+- Tray(시스템 트레이) 지원: `trayMinimize` 설정 시 창 닫기 → 숨김, 트레이 더블클릭 → 복원, "종료" 메뉴로만 앱 종료
+- 시작 시 자동 실행: `app.setLoginItemSettings()` 기반, `system:startup-get/set` IPC
+- `AppSettings`에 `autoLoginDays` (0=비활성, 1/7/30/90일), `trayMinimize` 필드 추가
+
+**설정 모달 — 시스템 탭 신규**
+- 자동 로그인 활성화 토글 + 유지 기간 선택(1/7/30/90일) + 세션 만료일 표시 + 세션 삭제
+- 시작 시 자동 실행 토글
+- 트레이 최소화 토글
+
+**관리자 — 사용자 수정 기능**
+- `AdminUsers` 사용자 행에 「수정」버튼 추가
+- `EditUserModal` 신규: 표시 이름 / 이메일 / 역할 변경 (사용자명은 읽기전용 표시)
+
+**내 정보 / 비밀번호 변경 (일반 사용자)**
+- 설정 모달 서버 연결 탭 — 커넥티드 상태일 때 하단에 「내 정보」·「비밀번호 변경」섹션 노출
+- 표시 이름·이메일 수정 → `user:update-profile` (`PATCH /users/me`)
+- 현재 비밀번호 + 새 비밀번호 변경 → `user:change-password` (`POST /auth/change-password`), 8자 이상 검증
+- `ServerConnectionService` 신규: `getMyProfile()`, `updateMyProfile()`, `changePassword()`
+- 신규 IPC: `user:my-profile`, `user:update-profile`, `user:change-password`
+
+### 수정
+- `TagsPage` 스타일 객체 타입 오류 수정 (`Record<string, CSSProperties>` → `satisfies` 패턴으로 함수형 스타일 허용)
+- `IpcChannelMap`에 누락된 태그 확장 채널 전체 등록 (타입 안전성 확보)
+
+---
+
 ### 추가 (Phase U — 관리자 UI + FilesPage V2 재구축)
 
 **FilesPage V2 재작성**
@@ -63,6 +116,34 @@ VaultLine Lite 변경 이력입니다. [Keep a Changelog](https://keepachangelog
 - 저장소 간 이동 (`file:cross-repo-move`) — 다른 저장소로 파일 복사 + 원본 삭제
 - MoveModal — 대상 폴더/저장소 선택 UI (폴더 브라우징, 브레드크럼)
 - FileToolbar "이동" 버튼 추가
+
+### 추가 (서버 공유 기능 구현)
+
+**ShareModal 개선**
+- "클립보드 복사" 옵션 제거
+- "🌐 서버 공유" 옵션 추가 (커넥티드 모드 전용): 팀원 다중 선택, 권한(읽기/읽기+쓰기), 만료일 설정
+- 로컬 링크 옵션 섹션 구조 개선 (서버 실행 중엔 옵션 숨김)
+
+**SharesPageV2 업데이트**
+- "공유받은" 탭 — 실제 서버 데이터 표시 (공유자/권한/만료일/공유 해제 버튼)
+- "내가 공유" 탭 — 실제 서버 데이터 표시 (권한/만료일/수신자/공유 취소 버튼)
+- 탭 배지 — 건수 실시간 반영 (10초 폴링)
+
+**신규 IPC 5개 (server.ipc.ts)**
+- `server:share-create` — 파일 공유 생성 (대상 사용자, 권한, 만료일)
+- `server:share-list` — 내가 보낸/받은 공유 목록
+- `server:share-revoke` — 공유 취소 (공유 생성자)
+- `server:share-leave` — 공유 해제 (수신자)
+- `server:user-list` — 서버 사용자 목록 조회
+
+**ServerShareService 업데이트**
+- `createShare()` — `expiresAt?` 파라미터 추가
+- `listShares()` — 보낸/받은 분리 반환
+- `revokeShare()` / `leaveShare()` / `getUserList()` 신규 메서드
+
+**공유 타입 추가 (ipc.ts)**
+- `ServerShareItem` 인터페이스 (id, repoId, filePath, permission, expiresAt, ownerUserId, recipients 등)
+- `ServerUser` 인터페이스 (id, username, displayName, isOnline)
 
 ### 추가 (Phase C — 서버 연동 계층)
 - ModeManager — 오프라인/커넥티드 전환 핵심 (자동 재시도, Renderer 알림)

@@ -17,9 +17,9 @@ let _svnBinDir: string | null = null
 
 /** SVN 바이너리 디렉토리 탐색 */
 function findSvnBinDir(): string {
-  // 1. 번들 경로 (프로덕션)
+  // 1. 번들 경로 (프로덕션) — process.resourcesPath = 설치경로/resources/
   if (!is.dev) {
-    const bundledPath = join(app.getAppPath(), '..', 'resources', 'svn', 'bin')
+    const bundledPath = join(process.resourcesPath, 'svn', 'bin')
     if (existsSync(join(bundledPath, 'svn.exe')) || existsSync(join(bundledPath, 'svn'))) {
       return bundledPath
     }

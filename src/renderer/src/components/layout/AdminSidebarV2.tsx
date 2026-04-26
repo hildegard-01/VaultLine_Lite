@@ -1,14 +1,14 @@
 /**
- * AdminSidebarV2 — 관리자 모드 전용 사이드바 (220px)
+ * AdminSidebarV2 — 앱 관리 전용 사이드바 (220px)
  *
  * 역할: /admin/* 경로 진입 시 ShellV2가 SidebarV2 대신 이 컴포넌트를 렌더합니다.
- *       상단에 "← 파일로 돌아가기" 버튼 + 3섹션(관리/설정/모니터링) 메뉴를 표시합니다.
- * 구성: AdminSidebarV2 (메인) / Section / Item — 와이어프레임 섹션 4의 관리자 사이드바를 그대로 따름
+ *       일반 섹션(모든 사용자) + 시스템 관리자 섹션(isAdmin && connected) 구성.
  */
 
 import { type CSSProperties, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { colors, layout, fontFamily } from '@renderer/design/theme';
+import { useMode } from '@renderer/hooks/useMode';
 
 interface ItemDef {
   path: string;
@@ -16,36 +16,26 @@ interface ItemDef {
   icon: string;
 }
 
-interface SectionDef {
-  title: string;
-  items: ItemDef[];
-}
+/* ────────── 일반 섹션 (모든 사용자) ────────── */
+const GENERAL_SECTIONS = [
+  {
+    title: '앱 관리',
+    items: [
+      { path: '/admin',              label: '대시보드',  icon: '⊞' },
+      { path: '/admin/repos',        label: '저장소',    icon: '🗄' },
+      { path: '/admin/activity-log', label: '활동 로그', icon: '📊' },
+      { path: '/admin/system',       label: '시스템 정보', icon: '🛡' },
+      { path: '/admin/backup',       label: '백업',      icon: '💾' },
+    ],
+  },
+];
 
-const SECTIONS: SectionDef[] = [
-  {
-    title: '관리',
-    items: [
-      { path: '/admin',            label: '대시보드',   icon: '⊞' },
-      { path: '/admin/users',      label: '사용자',     icon: '👥' },
-      { path: '/admin/groups',     label: '그룹',       icon: '⊟' },
-      { path: '/admin/repos',      label: '저장소',     icon: '🗄' },
-    ],
-  },
-  {
-    title: '설정',
-    items: [
-      { path: '/admin/settings',         label: '일반설정',   icon: '⚙' },
-      { path: '/admin/approval-rules',   label: '승인규칙',   icon: '✓' },
-    ],
-  },
-  {
-    title: '모니터링',
-    items: [
-      { path: '/admin/activity-log', label: '활동 로그',  icon: '📊' },
-      { path: '/admin/system',       label: '시스템',     icon: '🛡' },
-      { path: '/admin/backup',       label: '백업',       icon: '💾' },
-    ],
-  },
+/* ────────── 시스템 관리자 섹션 (isAdmin && connected) ────────── */
+const ADMIN_SECTION_ITEMS: ItemDef[] = [
+  { path: '/admin/users',           label: '사용자 관리', icon: '👥' },
+  { path: '/admin/groups',          label: '그룹 관리',   icon: '⊟' },
+  { path: '/admin/admin-shares',    label: '공유 관리',   icon: '↗' },
+  { path: '/admin/server-settings', label: '서버 설정',   icon: '⚙' },
 ];
 
 /* 스타일 */
@@ -86,9 +76,15 @@ const sectionTitleStyle: CSSProperties = {
   color: colors.textMuted,
 };
 
-function Item({
-  def, active, onClick,
-}: { def: ItemDef; active: boolean; onClick: () => void }) {
+const adminSectionTitleStyle: CSSProperties = {
+  ...sectionTitleStyle,
+  color: colors.navy,
+  borderTop: `1px solid ${colors.border}`,
+  marginTop: 4,
+  paddingTop: 12,
+};
+
+function Item({ def, active, onClick }: { def: ItemDef; active: boolean; onClick: () => void }) {
   const style: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -117,10 +113,10 @@ function Item({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, titleStyle, children }: { title: string; titleStyle?: CSSProperties; children: ReactNode }) {
   return (
     <div>
-      <div style={sectionTitleStyle}>{title}</div>
+      <div style={titleStyle ?? sectionTitleStyle}>{title}</div>
       <div>{children}</div>
     </div>
   );
@@ -129,6 +125,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function AdminSidebarV2(): React.JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAdmin, connected } = useMode();
 
   const isActive = (path: string): boolean => {
     if (path === '/admin') return location.pathname === '/admin';
@@ -141,7 +138,8 @@ export default function AdminSidebarV2(): React.JSX.Element {
         ← 파일로 돌아가기
       </button>
 
-      {SECTIONS.map((sec) => (
+      {/* 일반 섹션 — 모든 사용자 */}
+      {GENERAL_SECTIONS.map((sec) => (
         <Section key={sec.title} title={sec.title}>
           {sec.items.map((item) => (
             <Item
@@ -153,6 +151,20 @@ export default function AdminSidebarV2(): React.JSX.Element {
           ))}
         </Section>
       ))}
+
+      {/* 시스템 관리자 섹션 — 관리자 + 커넥티드 모드에서만 표시 */}
+      {isAdmin && connected && (
+        <Section title="시스템 관리자" titleStyle={adminSectionTitleStyle}>
+          {ADMIN_SECTION_ITEMS.map((item) => (
+            <Item
+              key={item.path}
+              def={item}
+              active={isActive(item.path)}
+              onClick={() => navigate(item.path)}
+            />
+          ))}
+        </Section>
+      )}
     </aside>
   );
 }

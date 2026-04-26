@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { copyFileSync } from 'fs'
 import { getSvnPath, getSvnEnv, toFileUrl } from './SvnPathHelper'
 
 const execFileAsync = promisify(execFile)
@@ -370,6 +371,131 @@ export async function svnUnlock(
   await execSvn('svn', args)
 }
 
+// ═══ 원격 WC 파일 정보/이력/Diff/업로드 (인증 포함) ═══
+
+/** svn info for a WC file with credentials */
+export async function infoFileWithAuth(
+  wcPath: string, filePath: string, username: string, password: string
+): Promise<SvnInfoEntry> {
+  const targetPath = `${wcPath}/${filePath}`
+  return enqueue(wcPath, async () => {
+    const { stdout } = await execSvn('svn', [
+      'info', '--xml', targetPath,
+      '--username', username, '--password', password,
+      '--non-interactive', '--no-auth-cache'
+    ])
+    return parseSvnInfoXml(stdout)
+  })
+}
+
+/** svn log for a file with credentials */
+export async function logFileWithAuth(
+  wcPath: string, filePath: string, username: string, password: string, limit = 20
+): Promise<SvnLogEntry[]> {
+  const targetPath = `${wcPath}/${filePath}`
+  return enqueue(wcPath, async () => {
+    const { stdout } = await execSvn('svn', [
+      'log', '--xml', '--limit', String(limit), targetPath,
+      '--username', username, '--password', password,
+      '--non-interactive', '--no-auth-cache'
+    ])
+    return parseSvnLogXml(stdout)
+  })
+}
+
+/** svn diff -r rev1:rev2 with credentials */
+export async function diffRevWithAuth(
+  wcPath: string, filePath: string, rev1: number, rev2: number, username: string, password: string
+): Promise<string> {
+  const targetPath = `${wcPath}/${filePath}`
+  return enqueue(wcPath, async () => {
+    const { stdout } = await execSvn('svn', [
+      'diff', '-r', `${rev1}:${rev2}`, targetPath,
+      '--username', username, '--password', password,
+      '--non-interactive', '--no-auth-cache'
+    ])
+    return stdout
+  })
+}
+
+/** svn relocate — 워킹카피의 저장소 URL 변경 (프록시 포트 변경 시) */
+export async function relocate(wcPath: string, newUrl: string): Promise<void> {
+  await enqueue(wcPath, async () => {
+    await execSvn('svn', ['relocate', newUrl, wcPath])
+  })
+}
+
+/** svn status for a single file (로컬 체크, 인증 불필요) */
+export async function statusFileWithAuth(
+  wcPath: string, filePath: string
+): Promise<SvnStatusEntry | null> {
+  const targetPath = `${wcPath}/${filePath}`
+  return enqueue(wcPath, async () => {
+    const { stdout } = await execSvn('svn', ['status', '--xml', targetPath])
+    const entries = parseSvnStatusXml(stdout)
+    return entries.length > 0 ? entries[0] : null
+  })
+}
+
+/** svn commit with credentials */
+export async function commitWithAuth(
+  wcPath: string, message: string, targets: string[], username: string, password: string
+): Promise<number> {
+  return enqueue(wcPath, async () => {
+    const targetPaths = targets.map(t => `${wcPath}/${t}`)
+    const { stdout, stderr } = await execSvn('svn', [
+      'commit', '-m', message, ...targetPaths,
+      '--username', username, '--password', password,
+      '--non-interactive', '--no-auth-cache',
+    ])
+    const lastLine = (stdout + '\n' + stderr).trimEnd().split('\n').pop()?.trim() ?? ''
+    const match = lastLine.match(/(\d+)\.$/)
+    return match ? parseInt(match[1], 10) : 0
+  })
+}
+
+/** svn status --verbose --xml — WC 전체 파일 상태+리비전 한 번에 조회 (로컬 전용) */
+export async function wcStatusVerbose(wcPath: string): Promise<SvnVerboseStatusEntry[]> {
+  return enqueue(wcPath, async () => {
+    const { stdout } = await execSvn('svn', ['status', '--verbose', '--xml', wcPath])
+    return parseSvnVerboseStatusXml(stdout, wcPath)
+  })
+}
+
+/** svn commit (WC 전체) with credentials */
+export async function batchCommitWithAuth(
+  wcPath: string, message: string, username: string, password: string
+): Promise<number> {
+  return enqueue(wcPath, async () => {
+    const { stdout, stderr } = await execSvn('svn', [
+      'commit', '-m', message, wcPath,
+      '--username', username, '--password', password,
+      '--non-interactive', '--no-auth-cache',
+    ])
+    const lastLine = (stdout + '\n' + stderr).trimEnd().split('\n').pop()?.trim() ?? ''
+    const match = lastLine.match(/(\d+)\.$/)
+    return match ? parseInt(match[1], 10) : 0
+  })
+}
+
+/** 파일 복사 + svn commit with credentials (새 버전 업로드) */
+export async function commitFileNewVersion(
+  wcPath: string, filePath: string, srcFilePath: string, message: string, username: string, password: string
+): Promise<number> {
+  const targetPath = `${wcPath}/${filePath}`
+  return enqueue(wcPath, async () => {
+    copyFileSync(srcFilePath, targetPath)
+    const { stdout, stderr } = await execSvn('svn', [
+      'commit', '-m', message, targetPath,
+      '--username', username, '--password', password,
+      '--non-interactive', '--no-auth-cache'
+    ])
+    const lastLine = (stdout + '\n' + stderr).trimEnd().split('\n').pop()?.trim() ?? ''
+    const match = lastLine.match(/(\d+)\.$/)
+    return match ? parseInt(match[1], 10) : 0
+  })
+}
+
 // ═══ XML 파싱 ═══
 
 export interface SvnListEntry {
@@ -408,6 +534,12 @@ export interface SvnBlameEntry {
 export interface SvnStatusEntry {
   path: string
   status: 'modified' | 'added' | 'deleted' | 'unversioned' | 'missing' | 'conflicted'
+}
+
+export interface SvnVerboseStatusEntry {
+  path: string
+  status: 'normal' | 'modified' | 'added' | 'deleted' | 'unversioned' | 'missing' | 'conflicted'
+  revision: number
 }
 
 /** svn list --xml 파싱 */
@@ -502,6 +634,37 @@ function parseSvnStatusXml(xml: string): SvnStatusEntry[] {
     if (statusMap[itemStatus]) {
       entries.push({ path, status: statusMap[itemStatus] })
     }
+  }
+  return entries
+}
+
+/** svn status --verbose --xml 파싱 */
+function parseSvnVerboseStatusXml(xml: string, wcPath: string): SvnVerboseStatusEntry[] {
+  const entries: SvnVerboseStatusEntry[] = []
+  const entryRegex = /<entry\s+path="([^"]+)">([\s\S]*?)<\/entry>/g
+  let match: RegExpExecArray | null
+  const normalizedWc = wcPath.replace(/\\/g, '/').replace(/\/$/, '')
+
+  while ((match = entryRegex.exec(xml)) !== null) {
+    const absPath = match[1].replace(/\\/g, '/')
+    const block = match[2]
+    const item = extractAttr(block, 'wc-status', 'item') || 'normal'
+    const commitRev = parseInt(extractAttr(block, 'commit', 'revision') || '0', 10)
+    const wcRev = parseInt(extractAttr(block, 'wc-status', 'revision') || '0', 10)
+
+    let relPath = absPath.startsWith(normalizedWc)
+      ? absPath.slice(normalizedWc.length).replace(/^\//, '')
+      : absPath
+    relPath = relPath.replace(/\\/g, '/')
+
+    if (!relPath) continue // WC 루트 자체 제외
+
+    const validStatus = ['normal', 'modified', 'added', 'deleted', 'unversioned', 'missing', 'conflicted']
+    entries.push({
+      path: relPath,
+      status: validStatus.includes(item) ? item as SvnVerboseStatusEntry['status'] : 'normal',
+      revision: commitRev || wcRev,
+    })
   }
   return entries
 }

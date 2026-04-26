@@ -97,6 +97,8 @@ export interface SearchResult {
   matchType: 'filename' | 'commit' | 'content'
   snippet: string
   revision: number
+  remoteRepoId?: number   // 공유받은 파일인 경우
+  ownerName?: string
 }
 
 // === 태그 ===
@@ -129,14 +131,96 @@ export interface LockRule {
 // === 로컬 공유 ===
 export interface ShareServerStatus {
   running: boolean
-  url?: string
-  token?: string
-  expiresAt?: string
-  repoId?: number
-  filePath?: string
-  hasPassword?: boolean
-  maxDownloads?: number
-  accessCount?: number
+  url?: string          // 서버 베이스 URL (http://ip:port)
+  port?: number
+  activeLinkCount?: number
+  // 새 링크 추가 시 응답에 포함 (ShareModal 호환)
+  newLink?: ShareLinkEntry
+}
+
+export interface ShareLinkEntry {
+  id: number
+  repoId: number
+  filePath: string
+  repoName: string | null
+  token: string
+  expiresAt: string
+  hasPassword: boolean
+  maxDownloads: number | null
+  accessCount: number
+  createdAt: string
+  downloadUrl: string   // 전체 다운로드 URL
+}
+
+// === 서버 공유 ===
+export interface ShareRecipientItem {
+  userId: number
+  username: string
+  displayName: string
+  status: 'pending' | 'accepted' | 'rejected'
+  accessedAt: string | null
+}
+
+export interface ServerShareItem {
+  id: number
+  repoId: number
+  repoName: string | null
+  filePath: string | null          // null = 저장소 전체
+  permission: 'r' | 'rw'
+  shareType: 'user' | 'group' | 'link'
+  expiresAt: string | null         // null = 영구
+  isActive: boolean
+  accessCount: number
+  createdAt: string
+  ownerUserId: number
+  ownerUsername: string
+  ownerDisplayName: string
+  recipients?: ShareRecipientItem[]
+  shareUrl?: string
+}
+
+export interface ServerReceivedShareItem {
+  id: number
+  repoId: number
+  filePath: string | null
+  permission: 'r' | 'rw'
+  expiresAt: string | null
+  isActive: boolean
+  createdAt: string
+  ownerUserId: number
+  ownerDisplayName: string | null
+  myStatus: 'pending' | 'accepted' | 'rejected'
+  respondedAt: string | null
+}
+
+export interface ServerUser {
+  id: number
+  username: string
+  displayName: string
+  isOnline?: boolean
+}
+
+// === 승인 워크플로우 ===
+export interface ApprovalReviewerItem {
+  userId: number
+  username: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  comment: string | null
+  reviewedAt: string | null
+}
+
+export interface ApprovalItem {
+  id: number
+  repoId: number
+  filePath: string | null
+  revision: number | null
+  requesterId: number
+  requesterName: string | null
+  message: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  reviewers: ApprovalReviewerItem[]
+  resolvedAt: string | null
+  createdAt: string
 }
 
 // === 파일 감시 (Phase 9) ===
@@ -209,6 +293,16 @@ export interface RemoteRepo {
   connectionStatus: 'connected' | 'unreachable' | 'unknown'
   lastSynced: string | null
   createdAt: string
+  serverShareId?: number | null
+  filePath?: string | null
+}
+
+export interface RemoteFileEntry {
+  name: string
+  path: string
+  type: 'file' | 'dir'
+  size: number
+  modifiedAt?: string
 }
 
 export interface SvnServeStatus {
@@ -255,6 +349,10 @@ export interface AppSettings {
   defaultView: 'list' | 'grid'
   shareServerPort: number
   shareExpiryMinutes: number
+  savedServerUrl: string
+  savedUsername: string
+  autoLoginDays: number
+  trayMinimize: boolean
 }
 
 // === 저장소별 설정 (Phase 10) ===
@@ -284,6 +382,10 @@ export interface IpcChannelMap {
   // 시스템 (Phase U)
   'system:health-check': { req: void; res: { svn: { ok: boolean; version?: string }; libreoffice: { ok: boolean; path?: string }; svnserve: { ok: boolean; running: boolean }; watcher: { ok: boolean } } }
   'system:info-full': { req: void; res: { version: string; electron: string; node: string; chrome: string; platform: string; arch: string; osRelease: string; uptime: number; dbSizeBytes: number; dataDir: string } }
+  'system:startup-get': { req: void; res: { openAtLogin: boolean; openAsHidden: boolean } }
+  'system:startup-set': { req: { openAtLogin: boolean; openAsHidden?: boolean }; res: void }
+  'session:info': { req: void; res: { expiresAt: string | null } }
+  'session:clear': { req: void; res: void }
 
   // 파일
   'file:list': { req: FileListRequest; res: FileEntry[] }
@@ -349,9 +451,30 @@ export interface IpcChannelMap {
   // 로컬 공유
   'share:export': { req: { repoId: number; path: string }; res: { exportPath: string } }
   'share:start-server': { req: { repoId: number; path: string; expiryMinutes?: number; password?: string; maxDownloads?: number; port?: number }; res: ShareServerStatus }
+  'share:restart-server': { req: void; res: ShareServerStatus }
   'share:stop-server': { req: void; res: void }
   'share:server-status': { req: void; res: ShareServerStatus }
   'share:copy-clipboard': { req: { repoId: number; path: string }; res: { url: string } }
+  'share:link-list': { req: void; res: ShareLinkEntry[] }
+  'share:list': { req: void; res: ShareLinkEntry[] }
+  'share:revoke': { req: { id: number }; res: { id: number } }
+  'share:link-update': { req: { id: number; expiresAt?: string; password?: string; clearPassword?: boolean }; res: ShareLinkEntry }
+
+  // 서버 공유 (커넥티드 모드)
+  'server:share-create': { req: { repoId: number; filePath: string; recipientIds: number[]; permission: 'r' | 'rw'; expiresAt?: string }; res: ServerShareItem }
+  'server:share-list': { req: void; res: { sent: ServerShareItem[]; received: ServerShareItem[] } }
+  'server:share-received': { req: { status?: 'pending' | 'accepted' | 'rejected' }; res: ServerReceivedShareItem[] }
+  'server:share-accept': { req: { id: number }; res: { status: string } }
+  'server:share-reject': { req: { id: number }; res: { status: string } }
+  'server:share-revoke': { req: { id: number }; res: void }
+  'server:share-leave': { req: { id: number }; res: void }
+  'server:user-list': { req: void; res: ServerUser[] }
+
+  // 승인 워크플로우 (커넥티드 모드)
+  'approval:list': { req: { statusFilter?: string }; res: { items: ApprovalItem[]; total: number } }
+  'approval:create': { req: { repoId: number; filePath: string; revision: number; message: string; reviewerIds: number[] }; res: ApprovalItem }
+  'approval:approve': { req: { id: number; comment?: string }; res: ApprovalItem }
+  'approval:reject': { req: { id: number; comment?: string }; res: ApprovalItem }
 
   // 파일 감시 (Phase 9)
   'watcher:pending': { req: void; res: PendingChange[] }
@@ -405,6 +528,8 @@ export interface IpcChannelMap {
   'remote-repo:list': { req: void; res: RemoteRepo[] }
   'remote-repo:disconnect': { req: { id: number }; res: void }
   'remote-repo:status': { req: { id: number }; res: RemoteRepo }
+  'remote-repo:file-list': { req: { id: number; subPath?: string }; res: RemoteFileEntry[] }
+  'remote-repo:sync': { req: { id: number }; res: { updated: boolean } }
 
   // 동기화 (Phase 11)
   'sync:update': { req: { remoteRepoId: number }; res: { updated: boolean; conflicts: ConflictEntry[] } }
@@ -420,4 +545,18 @@ export interface IpcChannelMap {
   'server:disconnect': { req: void; res: { mode: string } }
   'server:status': { req: void; res: { mode: string; connected: boolean; serverUrl: string; user: { userId: number; username: string; role: string } | null } }
   'server:isConnected': { req: void; res: boolean }
+
+  // 내 계정
+  'user:my-profile': { req: void; res: { id: number; username: string; displayName: string | null; email: string | null; role: string } }
+  'user:update-profile': { req: { displayName?: string; email?: string }; res: void }
+  'user:change-password': { req: { currentPassword: string; newPassword: string }; res: void }
+
+  // 태그 확장 (Phase 6 확장)
+  'tag:search': { req: { tagIds: number[]; mode: 'and' | 'or' }; res: Array<{ repoId: number; repoName: string; filePath: string; fileSize: number; modifiedAt: string }> }
+  'tag:counts': { req: void; res: Record<number, number> }
+  'tag:rule:list': { req: void; res: Array<{ id: number; tagId: number; tagName: string; patternType: string; pattern: string; isActive: boolean }> }
+  'tag:rule:create': { req: { tagId: number; patternType: string; pattern: string }; res: number }
+  'tag:rule:delete': { req: { id: number }; res: void }
+  'tag:rule:toggle': { req: { id: number; isActive: boolean }; res: void }
+  'tag:rule:apply-retroactive': { req: void; res: { applied: number } }
 }

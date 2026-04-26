@@ -15,7 +15,7 @@ interface SettingsModalProps {
   initialTab?: Tab
 }
 
-type Tab = 'general' | 'backup' | 'server'
+type Tab = 'general' | 'backup' | 'server' | 'system'
 
 export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModalProps) {
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -29,7 +29,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
         <div className="px-5 py-3.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-4">
           <span className="font-bold text-sm">설정</span>
           <div className="flex gap-1 ml-auto">
-            {([['general', '일반'], ['backup', '백업'], ['server', '서버 연결']] as const).map(([key, label]) => (
+            {([['general', '일반'], ['backup', '백업'], ['server', '서버 연결'], ['system', '시스템']] as const).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
@@ -49,6 +49,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
           {tab === 'general' && <GeneralTab />}
           {tab === 'backup' && <BackupTab />}
           {tab === 'server' && <ServerTab />}
+          {tab === 'system' && <SystemTab />}
         </div>
 
         <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end bg-gray-50 dark:bg-gray-800">
@@ -313,6 +314,148 @@ function BackupTab() {
   )
 }
 
+// ─── 시스템 탭 ───
+
+function SystemTab() {
+  const queryClient = useQueryClient()
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings:get'],
+    queryFn: () => invoke('settings:get') as Promise<any>
+  })
+
+  const { data: startupInfo } = useQuery({
+    queryKey: ['system:startup-get'],
+    queryFn: () => invoke('system:startup-get') as Promise<{ openAtLogin: boolean; openAsHidden: boolean }>
+  })
+
+  const { data: sessionInfo, refetch: refetchSession } = useQuery({
+    queryKey: ['session:info'],
+    queryFn: () => invoke('session:info') as Promise<{ expiresAt: string | null }>
+  })
+
+  const autoLoginDays: number = settings?.autoLoginDays ?? 0
+  const trayMinimize: boolean = settings?.trayMinimize ?? false
+  const openAtLogin: boolean = startupInfo?.openAtLogin ?? false
+
+  const handleAutoLoginToggle = async (enabled: boolean) => {
+    await invoke('settings:update', { autoLoginDays: enabled ? 7 : 0 })
+    if (!enabled) await invoke('session:clear')
+    queryClient.invalidateQueries({ queryKey: ['settings:get'] })
+    refetchSession()
+  }
+
+  const handleDaysChange = async (days: number) => {
+    await invoke('settings:update', { autoLoginDays: days })
+    queryClient.invalidateQueries({ queryKey: ['settings:get'] })
+  }
+
+  const handleSessionClear = async () => {
+    await invoke('session:clear')
+    refetchSession()
+  }
+
+  const handleStartupToggle = async (enabled: boolean) => {
+    await invoke('system:startup-set', { openAtLogin: enabled, openAsHidden: true })
+    queryClient.invalidateQueries({ queryKey: ['system:startup-get'] })
+  }
+
+  const handleTrayToggle = async (enabled: boolean) => {
+    await invoke('settings:update', { trayMinimize: enabled })
+    queryClient.invalidateQueries({ queryKey: ['settings:get'] })
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* 자동 로그인 */}
+      <div>
+        <h3 className="text-[11px] font-semibold text-gray-500 mb-3">자동 로그인</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[12px]">자동 로그인 활성화</span>
+              <p className="text-[10px] text-gray-400 mt-0.5">서버 로그인 상태를 OS 암호화로 저장합니다</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={autoLoginDays > 0}
+              onChange={e => handleAutoLoginToggle(e.target.checked)}
+              className="accent-navy"
+            />
+          </div>
+
+          {autoLoginDays > 0 && (
+            <>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 block mb-1">로그인 유지 기간</label>
+                <select
+                  value={autoLoginDays}
+                  onChange={e => handleDaysChange(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900"
+                >
+                  <option value={1}>1일</option>
+                  <option value={7}>7일</option>
+                  <option value={30}>30일</option>
+                  <option value={90}>90일</option>
+                </select>
+              </div>
+
+              {sessionInfo?.expiresAt ? (
+                <p className="text-[10px] text-gray-400">
+                  세션 만료일: {new Date(sessionInfo.expiresAt).toLocaleDateString('ko-KR')}
+                </p>
+              ) : (
+                <p className="text-[10px] text-gray-400">저장된 세션 없음 (다음 로그인 시 저장됩니다)</p>
+              )}
+
+              {sessionInfo?.expiresAt && (
+                <button
+                  onClick={handleSessionClear}
+                  className="px-3 py-1 text-[10px] font-semibold border border-orange-200 text-orange-600 rounded-md hover:bg-orange-50"
+                >
+                  저장된 세션 삭제
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 시스템 통합 */}
+      <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+        <h3 className="text-[11px] font-semibold text-gray-500 mb-3">시스템 통합</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[12px]">시작 시 자동 실행</span>
+              <p className="text-[10px] text-gray-400 mt-0.5">Windows 로그인 시 VaultLine Lite 자동 시작</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={openAtLogin}
+              onChange={e => handleStartupToggle(e.target.checked)}
+              className="accent-navy"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[12px]">트레이 최소화</span>
+              <p className="text-[10px] text-gray-400 mt-0.5">창 닫기 시 트레이에서 계속 실행 (재시작 후 적용)</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={trayMinimize}
+              onChange={e => handleTrayToggle(e.target.checked)}
+              className="accent-navy"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── 서버 연결 탭 ───
 
 function ServerTab() {
@@ -404,8 +547,182 @@ function ServerTab() {
             className="px-4 py-1.5 text-[11px] font-semibold border border-red-200 text-red-500 rounded-md hover:bg-red-50">
             연결 해제
           </button>
+
+          {/* 내 정보 / 비밀번호 변경 */}
+          <div className="border-t border-gray-100 pt-4 space-y-4">
+            <MyProfileSection />
+            <ChangePasswordSection />
+          </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ─── 내 정보 수정 ───
+
+function MyProfileSection() {
+  const queryClient = useQueryClient()
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['user:my-profile'],
+    queryFn: () => invoke('user:my-profile'),
+  })
+
+  const [displayName, setDisplayName] = useState('')
+  const [email, setEmail] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (profile) {
+      setDisplayName((profile as any).displayName ?? '')
+      setEmail((profile as any).email ?? '')
+    }
+  }, [profile])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      await invoke('user:update-profile', {
+        displayName: displayName.trim() || undefined,
+        email: email.trim() || undefined,
+      })
+      queryClient.invalidateQueries({ queryKey: ['user:my-profile'] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '저장 실패')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (isLoading) return null
+
+  return (
+    <div>
+      <h3 className="text-[11px] font-semibold text-gray-500 mb-2">내 정보</h3>
+      <div className="space-y-2">
+        <div>
+          <label className="text-[10px] text-gray-400 block mb-1">사용자명 (변경 불가)</label>
+          <input
+            type="text"
+            value={(profile as any)?.username ?? ''}
+            disabled
+            className="w-full px-2.5 py-1.5 text-[12px] border border-gray-100 rounded-md bg-gray-50 text-gray-400"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 block mb-1">표시 이름</label>
+          <input
+            type="text"
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
+            placeholder="홍길동"
+            className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 rounded-md bg-white"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 block mb-1">이메일</label>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="user@example.com"
+            className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 rounded-md bg-white"
+          />
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className={`px-4 py-1.5 text-[11px] font-semibold rounded-md transition disabled:opacity-50 ${
+            saved ? 'bg-green-500 text-white' : 'bg-navy text-white hover:bg-navy-dark'
+          }`}
+        >
+          {saving ? '저장 중...' : saved ? '저장됨 ✓' : '저장'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── 비밀번호 변경 ───
+
+function ChangePasswordSection() {
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+
+  const handleChange = async () => {
+    setError('')
+    setSuccess(false)
+    if (!currentPw || !newPw || !confirmPw) {
+      setError('모든 항목을 입력하세요.')
+      return
+    }
+    if (newPw.length < 8) {
+      setError('새 비밀번호는 8자 이상이어야 합니다.')
+      return
+    }
+    if (newPw !== confirmPw) {
+      setError('새 비밀번호가 일치하지 않습니다.')
+      return
+    }
+    setSaving(true)
+    try {
+      await invoke('user:change-password', { currentPassword: currentPw, newPassword: newPw })
+      setCurrentPw('')
+      setNewPw('')
+      setConfirmPw('')
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '비밀번호 변경 실패')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="text-[11px] font-semibold text-gray-500 mb-2">비밀번호 변경</h3>
+      <div className="space-y-2">
+        <input
+          type="password"
+          value={currentPw}
+          onChange={e => setCurrentPw(e.target.value)}
+          placeholder="현재 비밀번호"
+          className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 rounded-md bg-white"
+        />
+        <input
+          type="password"
+          value={newPw}
+          onChange={e => setNewPw(e.target.value)}
+          placeholder="새 비밀번호 (8자 이상)"
+          className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 rounded-md bg-white"
+        />
+        <input
+          type="password"
+          value={confirmPw}
+          onChange={e => setConfirmPw(e.target.value)}
+          placeholder="새 비밀번호 확인"
+          onKeyDown={e => { if (e.key === 'Enter') handleChange() }}
+          className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 rounded-md bg-white"
+        />
+        {error && <p className="text-[11px] text-red-500">{error}</p>}
+        {success && <p className="text-[11px] text-green-600">비밀번호가 변경되었습니다.</p>}
+        <button
+          onClick={handleChange}
+          disabled={saving}
+          className="px-4 py-1.5 text-[11px] font-semibold bg-navy text-white rounded-md hover:bg-navy-dark disabled:opacity-50"
+        >
+          {saving ? '변경 중...' : '변경'}
+        </button>
+      </div>
     </div>
   )
 }

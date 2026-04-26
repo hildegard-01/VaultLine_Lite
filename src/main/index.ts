@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, dialog, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, dialog, protocol, net, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log'
 
@@ -23,13 +24,52 @@ import { PresenceService } from './services/server/PresenceService'
  */
 
 let mainWindow: BrowserWindow | null = null
+let _tray: Tray | null = null
+
+/** 트레이 아이콘 경로 탐색 */
+function getTrayIcon(): Electron.NativeImage {
+  const candidates = is.dev
+    ? [join(app.getAppPath(), 'resources', 'icon.ico'), join(app.getAppPath(), 'resources', 'icon.png')]
+    : [join(process.resourcesPath, 'icon.ico'), join(process.resourcesPath, 'icon.png')]
+  for (const p of candidates) {
+    if (existsSync(p)) return nativeImage.createFromPath(p)
+  }
+  return nativeImage.createEmpty()
+}
+
+/** 트레이 생성 (최초 1회) */
+function ensureTray(): void {
+  if (_tray) return
+  _tray = new Tray(getTrayIcon())
+  _tray.setToolTip('VaultLine Lite')
+  const menu = Menu.buildFromTemplate([
+    {
+      label: '열기', click: () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '종료', click: () => {
+        _forceQuit = true
+        app.quit()
+      }
+    },
+  ])
+  _tray.setContextMenu(menu)
+  _tray.on('double-click', () => {
+    mainWindow?.show()
+    mainWindow?.focus()
+  })
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    width: 480,
+    height: 560,
+    minWidth: 480,
+    minHeight: 480,
     show: false,
     autoHideMenuBar: true,
     title: 'VaultLine Lite',
@@ -43,6 +83,21 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    mainWindow?.focus()
+  })
+
+  // 창 닫기: trayMinimize 설정 시 종료 대신 숨김
+  mainWindow.on('close', (e) => {
+    if (_forceQuit) return
+    try {
+      const { getAppSettings } = require('./services/SettingsService') as typeof import('./services/SettingsService')
+      const settings = getAppSettings()
+      if (settings.trayMinimize) {
+        e.preventDefault()
+        mainWindow?.hide()
+        ensureTray()
+      }
+    } catch { /* DB 초기화 전이면 무시 */ }
   })
 
   // 외부 링크는 기본 브라우저에서 열기
@@ -129,8 +184,13 @@ app.whenReady().then(() => {
   })
 })
 
-// Windows/Linux: 모든 윈도우 닫으면 앱 종료
+// Windows/Linux: 모든 윈도우 닫으면 앱 종료 (트레이 모드 시 제외)
 app.on('window-all-closed', () => {
+  try {
+    const { getAppSettings } = require('./services/SettingsService') as typeof import('./services/SettingsService')
+    const settings = getAppSettings()
+    if (settings.trayMinimize) return  // 트레이에서 계속 실행
+  } catch { /* DB 초기화 전이면 기본 동작 */ }
   if (process.platform !== 'darwin') {
     app.quit()
   }

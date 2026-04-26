@@ -112,6 +112,7 @@ export function SearchModal({ onClose, onSelect }: SearchModalProps) {
           {!loading && results.map((r, i) => {
             const typeLabel = r.matchType === 'filename' ? '파일명' : r.matchType === 'commit' ? '커밋' : '내용'
             const typeColor = r.matchType === 'filename' ? 'bg-blue-100 text-blue-600' : r.matchType === 'commit' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'
+            const fileName = r.filePath.split('/').pop() ?? r.filePath
             return (
               <div
                 key={i}
@@ -121,13 +122,20 @@ export function SearchModal({ onClose, onSelect }: SearchModalProps) {
                 <FileIcon type="file" name={r.filePath} size={16} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-medium truncate">{r.filePath}</span>
+                    <span className="text-xs font-medium truncate">{fileName}</span>
+                    {r.remoteRepoId && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 bg-teal-100 text-teal-700">공유</span>
+                    )}
                     <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${typeColor}`}>{typeLabel}</span>
                   </div>
-                  {r.snippet && (
+                  {r.snippet && !r.remoteRepoId && (
                     <div className="text-[11px] text-gray-400 truncate mt-0.5" dangerouslySetInnerHTML={{ __html: r.snippet }} />
                   )}
-                  <div className="text-[10px] text-gray-300 mt-0.5">{r.repoName} · r.{r.revision}</div>
+                  <div className="text-[10px] text-gray-300 mt-0.5">
+                    {r.repoName}
+                    {r.ownerName && ` · ${r.ownerName}`}
+                    {r.revision > 0 && ` · r.${r.revision}`}
+                  </div>
                 </div>
               </div>
             )

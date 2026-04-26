@@ -3,10 +3,10 @@
  *
  * 역할: 좌측 네비게이션. 즐겨찾기, 내 저장소, 태그, 바로가기, 휴지통, 디스크 사용량을 표시합니다.
  *       커넥티드 모드에서만 공유받은문서/관리 메뉴를 추가 표시합니다.
- * 구성: SidebarV2 (메인) / SidebarSection / SidebarItem / TagListV2 / DiskUsageV2
+ * 구성: SidebarV2 (메인) / SidebarSection / SidebarItem / DiskUsageV2
  */
 
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@renderer/services/ipcClient';
@@ -25,7 +25,7 @@ import {
   FolderPlus as FolderPlusIcon,
 } from '@renderer/design/Icons';
 import { useMode } from '@renderer/hooks/useMode';
-import type { Repository, Tag } from '@shared/types/ipc';
+import type { Repository, RemoteRepo } from '@shared/types/ipc';
 
 /* ────────────────────── SidebarSection ────────────────────── */
 
@@ -178,12 +178,9 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
 
   const [favOpen, setFavOpen] = useState(true);
   const [repoOpen, setRepoOpen] = useState(true);
-  const [tagOpen, setTagOpen] = useState(true);
+  const [sharedReposOpen, setSharedReposOpen] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(true);
   const [showCreateRepo, setShowCreateRepo] = useState(false);
-  const [showTagInput, setShowTagInput] = useState(false);
-  const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#1565C0');
 
   const { data: repos = [] } = useQuery({
     queryKey: ['repo:list'],
@@ -193,11 +190,6 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
   const { data: bookmarks = [] } = useQuery({
     queryKey: ['bookmark:list'],
     queryFn: () => invoke('bookmark:list'),
-  });
-
-  const { data: tags = [] } = useQuery({
-    queryKey: ['tag:list'],
-    queryFn: () => invoke('tag:list'),
   });
 
   const { data: trashItems = [] } = useQuery({
@@ -211,6 +203,13 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
     refetchInterval: 60000,
   });
 
+  const { data: remoteRepos = [] } = useQuery({
+    queryKey: ['remote-repo:list'],
+    queryFn: () => invoke('remote-repo:list'),
+    enabled: connected,
+    refetchInterval: connected ? 30000 : false,
+  });
+
   const activeRepoId = repoId ? Number(repoId) : null;
 
   const handleDeleteRepo = async (repo: Repository) => {
@@ -221,19 +220,6 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
       if (String(repo.id) === repoId) navigate('/');
     } catch (err) {
       alert(err instanceof Error ? err.message : '저장소 삭제 실패');
-    }
-  };
-
-  const handleCreateTag = async () => {
-    if (!newTagName.trim()) return;
-    try {
-      await invoke('tag:create', { name: newTagName.trim(), color: newTagColor });
-      setNewTagName('');
-      setNewTagColor('#1565C0');
-      setShowTagInput(false);
-      queryClient.invalidateQueries({ queryKey: ['tag:list'] });
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '태그 생성 실패');
     }
   };
 
@@ -281,8 +267,6 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
     background: '#e8eaed',
     margin: '4px 16px',
   };
-
-  const TAG_COLORS = ['#1565C0', '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#4E342E', '#37474F'];
 
   return (
     <aside style={sidebarStyle}>
@@ -345,83 +329,46 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
         )}
       </SidebarSection>
 
-      <div style={dividerStyle} />
-
-      {/* 태그 */}
-      <SidebarSection
-        title="태그"
-        expanded={tagOpen}
-        onToggle={() => setTagOpen((v) => !v)}
-        action={
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowTagInput((v) => !v);
-              setNewTagName('');
-              setNewTagColor('#1565C0');
-            }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: showTagInput ? colors.textMuted : colors.blue }}
-          >
-            {showTagInput ? '취소' : '+ 추가'}
-          </button>
-        }
-      >
-        {showTagInput && (
-          <div style={{ padding: '4px 16px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <input
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="태그 이름"
-                style={{
-                  flex: 1, minWidth: 0, padding: '4px 8px', fontSize: 12,
-                  border: `1px solid ${colors.border}`, borderRadius: 4,
-                  outline: 'none', fontFamily,
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreateTag();
-                  if (e.key === 'Escape') { setShowTagInput(false); setNewTagName(''); }
-                }}
-                autoFocus
-              />
-              <button
-                onClick={handleCreateTag}
-                style={{
-                  padding: '4px 10px', fontSize: 11, fontWeight: 600,
-                  background: colors.navy, color: '#fff', border: 'none',
-                  borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-                }}
-              >
-                확인
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: 4, paddingLeft: 2 }}>
-              {TAG_COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setNewTagColor(c)}
-                  style={{
-                    width: 16, height: 16, borderRadius: '50%', border: `2px solid ${newTagColor === c ? '#333' : 'transparent'}`,
-                    background: c, cursor: 'pointer', padding: 0,
-                    transform: newTagColor === c ? 'scale(1.15)' : 'none', transition: 'transform 0.1s',
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        <TagListV2 tags={tags as Tag[]} queryClient={queryClient} />
-      </SidebarSection>
+      {/* 공유받은 저장소 — 커넥티드 모드 전용, 공유자별 그룹 */}
+      {connected && (remoteRepos as RemoteRepo[]).length > 0 && (
+        <OwnerGroupedSharedRepos
+          remoteRepos={remoteRepos as RemoteRepo[]}
+          expanded={sharedReposOpen}
+          onToggle={() => setSharedReposOpen((v) => !v)}
+          currentPath={location.pathname}
+          onNavigate={navigate}
+          onDisconnect={async (repos) => {
+            const label = repos[0].ownerName ?? repos[0].displayName;
+            if (!window.confirm(`"${label}"의 공유를 모두 해제하시겠습니까?`)) return;
+            try {
+              for (const r of repos) {
+                await invoke('remote-repo:disconnect', { id: r.id });
+              }
+              queryClient.invalidateQueries({ queryKey: ['remote-repo:list'] });
+              const isViewing = repos.some(r => location.pathname === `/shared-repo/${r.id}`);
+              if (isViewing) navigate('/');
+            } catch (err) {
+              alert(err instanceof Error ? err.message : '연결 해제 실패');
+            }
+          }}
+          IC={IC}
+        />
+      )}
 
       <div style={dividerStyle} />
 
       {/* 바로가기 */}
       <SidebarSection title="바로가기" expanded={shortcutsOpen} onToggle={() => setShortcutsOpen((v) => !v)}>
-        {/* 커넥티드 전용: 공유받은 문서 */}
+        <SidebarItem
+          icon={<FolderIcon width={IC} height={IC} color={colors.textSub} />}
+          label="전체 파일"
+          active={location.pathname === '/all-files'}
+          onClick={() => navigate('/all-files')}
+        />
         {connected && (
           <SidebarItem
             icon={<SharedDocsIcon width={IC} height={IC} color={colors.textSub} />}
-            label="공유받은 문서"
+            label="공유 관리"
             active={location.pathname === '/shares'}
             onClick={() => navigate('/shares')}
           />
@@ -447,11 +394,11 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
         />
       </SidebarSection>
 
-      {/* 관리자 — 오프라인에서도 진입 가능 (Phase U) */}
+      {/* 앱 관리 — 모든 사용자에게 표시 */}
       <div style={dividerStyle} />
       <SidebarItem
         icon={<SettingsIcon width={IC} height={IC} color={colors.textSub} />}
-        label="관리자"
+        label="앱 관리"
         active={location.pathname.startsWith('/admin')}
         onClick={() => navigate('/admin')}
       />
@@ -473,80 +420,55 @@ export default function SidebarV2({ onCreateRepo }: SidebarV2Props) {
   );
 }
 
-/* ────────────────────── TagListV2 ────────────────────── */
+/* ────────────────────── OwnerGroupedSharedRepos ────────────────────── */
 
-function TagListV2({ tags, queryClient }: { tags: Tag[]; queryClient: any }) {
-  const [expanded, setExpanded] = useState(false);
-  const [search, setSearch] = useState('');
-  const MAX_VISIBLE = 5;
+interface OwnerGroupedSharedReposProps {
+  remoteRepos: RemoteRepo[];
+  expanded: boolean;
+  onToggle: () => void;
+  currentPath: string;
+  onNavigate: (path: string) => void;
+  onDisconnect: (repos: RemoteRepo[]) => void;
+  IC: number;
+}
 
-  const filtered = search
-    ? tags.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
-    : tags;
-  const visible = expanded ? filtered : filtered.slice(0, MAX_VISIBLE);
-  const hasMore = filtered.length > MAX_VISIBLE;
-
-  const handleTagClick = (tag: Tag) => {
-    window.dispatchEvent(new CustomEvent('vaultline:tag-filter', {
-      detail: { tagId: tag.id, tagName: tag.name, tagColor: tag.color },
-    }));
-  };
-
-  const handleDelete = async (e: React.MouseEvent, tag: Tag) => {
-    e.stopPropagation();
-    if (!window.confirm(`"${tag.name}" 태그를 삭제하시겠습니까?`)) return;
-    try {
-      await invoke('tag:delete', { id: tag.id });
-      queryClient.invalidateQueries({ queryKey: ['tag:list'] });
-      window.dispatchEvent(new CustomEvent('vaultline:tags-changed'));
-    } catch { /* 무시 */ }
-  };
+function OwnerGroupedSharedRepos({ remoteRepos, expanded, onToggle, currentPath, onNavigate, onDisconnect, IC }: OwnerGroupedSharedReposProps) {
+  // ownerName 기준으로 그룹화 — 같은 공유자의 파일들을 하나의 항목으로 표시
+  const groups = useMemo(() => {
+    const map = new Map<string, RemoteRepo[]>();
+    for (const r of remoteRepos) {
+      const key = r.ownerName ?? r.displayName ?? String(r.id);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    return Array.from(map.entries()).map(([ownerKey, repos]) => ({ ownerKey, repos }));
+  }, [remoteRepos]);
 
   return (
     <>
-      {tags.length > MAX_VISIBLE && (
-        <div style={{ padding: '0 16px 4px' }}>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="태그 검색..."
-            style={{
-              width: '100%', padding: '4px 8px', fontSize: 12,
-              border: `1px solid ${colors.border}`, borderRadius: 4,
-              outline: 'none',
-            }}
-          />
-        </div>
-      )}
-      {visible.map((tag) => (
-        <SidebarItem
-          key={tag.id}
-          icon={
-            <div style={{ width: 8, height: 8, borderRadius: 2, background: tag.color, flexShrink: 0 }} />
-          }
-          label={tag.name}
-          onClick={() => handleTagClick(tag)}
-          onAction={(e) => handleDelete(e, tag)}
-          actionLabel="태그 삭제"
-        />
-      ))}
-      {hasMore && !search && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          style={{
-            display: 'block', padding: '4px 16px', fontSize: 11,
-            color: colors.textMuted, background: 'none', border: 'none',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = colors.blue; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = colors.textMuted; }}
-        >
-          {expanded ? '접기' : `더보기 (${filtered.length - MAX_VISIBLE}개)`}
-        </button>
-      )}
-      {tags.length === 0 && (
-        <div style={{ padding: '4px 16px', fontSize: 12, color: colors.textMuted }}>태그가 없습니다</div>
-      )}
+      <div style={{ height: 1, background: '#e8eaed', margin: '4px 16px' }} />
+      <SidebarSection
+        title="공유받은 저장소"
+        expanded={expanded}
+        onToggle={onToggle}
+      >
+        {groups.map(({ ownerKey, repos }) => {
+          const firstId = repos[0].id;
+          const isActive = repos.some(r => currentPath === `/shared-repo/${r.id}`);
+          const label = repos.length > 1 ? `${ownerKey} (${repos.length}파일)` : ownerKey;
+          return (
+            <SidebarItem
+              key={ownerKey}
+              icon={<SharedDocsIcon width={IC} height={IC} color="#4ECDC4" />}
+              label={label}
+              active={isActive}
+              onClick={() => onNavigate(`/shared-repo/${firstId}`)}
+              onAction={() => onDisconnect(repos)}
+              actionLabel="공유 연결 해제"
+            />
+          );
+        })}
+      </SidebarSection>
     </>
   );
 }

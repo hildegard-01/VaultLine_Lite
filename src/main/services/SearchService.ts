@@ -1,3 +1,5 @@
+import { readdirSync, statSync } from 'fs'
+import { join } from 'path'
 import { getDatabase } from './DatabaseService'
 import type { SearchRequest, SearchResult } from '@shared/types/ipc'
 import { SEARCH_MAX_RESULTS } from '@shared/constants'
@@ -79,48 +81,130 @@ export function search(req: SearchRequest): SearchResult[] {
   return searchFallback(req)
 }
 
-/** 전체 저장소 통합 검색 (FTS5 → LIKE 폴백) */
+/** 전체 저장소 통합 검색 (FTS5 → LIKE 폴백 + remote_repos 파일명 검색) */
 export function globalSearch(query: string): SearchResult[] {
   const db = getDatabase()
   const count = (db.prepare('SELECT COUNT(*) as cnt FROM search_index').get() as { cnt: number }).cnt
   console.log('[Search] search_index 총 행 수:', count)
 
+  const localResults: SearchResult[] = []
+
   // FTS5 전체 컬럼 검색 시도
   const ftsResults = search({ query, type: undefined as any })
-  if (ftsResults.length > 0) return ftsResults
+  if (ftsResults.length > 0) {
+    localResults.push(...ftsResults)
+  } else {
+    // FTS5에서 결과 없으면 search_metadata 일반 테이블에서 LIKE 폴백
+    const pattern = `%${query}%`
+    try {
+      const rows = db.prepare(`
+        SELECT sm.repo_id, r.name as repo_name, sm.file_path, sm.revision,
+               sm.file_name, sm.commit_message
+        FROM search_metadata sm
+        JOIN repositories r ON r.id = sm.repo_id
+        WHERE sm.file_path LIKE ? OR sm.file_name LIKE ? OR sm.commit_message LIKE ?
+        LIMIT ?
+      `).all(pattern, pattern, pattern, SEARCH_MAX_RESULTS) as Array<{
+        repo_id: number; repo_name: string; file_path: string; revision: number; file_name: string; commit_message: string
+      }>
+      console.log('[Search] LIKE 폴백 결과 수:', rows.length)
 
-  // FTS5에서 결과 없으면 search_metadata 일반 테이블에서 LIKE 폴백 (부분 문자열 검색)
-  const pattern = `%${query}%`
-  try {
-    const rows = db.prepare(`
-      SELECT sm.repo_id, r.name as repo_name, sm.file_path, sm.revision,
-             sm.file_name, sm.commit_message
-      FROM search_metadata sm
-      JOIN repositories r ON r.id = sm.repo_id
-      WHERE sm.file_path LIKE ? OR sm.file_name LIKE ? OR sm.commit_message LIKE ?
-      LIMIT ?
-    `).all(pattern, pattern, pattern, SEARCH_MAX_RESULTS) as Array<{
-      repo_id: number; repo_name: string; file_path: string; revision: number; file_name: string; commit_message: string
-    }>
-    console.log('[Search] LIKE 폴백 결과 수:', rows.length)
-
-    return rows.map(row => {
-      const q = query.toLowerCase()
-      const nameMatch = row.file_name && row.file_name.toLowerCase().includes(q)
-      const commitMatch = row.commit_message && row.commit_message.toLowerCase().includes(q)
-      return {
-        repoId: row.repo_id,
-        repoName: row.repo_name,
-        filePath: row.file_path,
-        matchType: (nameMatch ? 'filename' : commitMatch ? 'commit' : 'filename') as 'filename' | 'commit' | 'content',
-        snippet: nameMatch ? row.file_name : row.commit_message || '',
-        revision: row.revision
-      }
-    })
-  } catch (e) {
-    console.error('[Search] LIKE 폴백 실패:', e)
-    return []
+      localResults.push(...rows.map(row => {
+        const q = query.toLowerCase()
+        const nameMatch = row.file_name && row.file_name.toLowerCase().includes(q)
+        const commitMatch = row.commit_message && row.commit_message.toLowerCase().includes(q)
+        return {
+          repoId: row.repo_id,
+          repoName: row.repo_name,
+          filePath: row.file_path,
+          matchType: (nameMatch ? 'filename' : commitMatch ? 'commit' : 'filename') as 'filename' | 'commit' | 'content',
+          snippet: nameMatch ? row.file_name : row.commit_message || '',
+          revision: row.revision
+        }
+      }))
+    } catch (e) {
+      console.error('[Search] LIKE 폴백 실패:', e)
+    }
   }
+
+  // 공유받은 문서 파일명 검색
+  const remoteResults = searchRemoteRepos(query)
+
+  return [...localResults, ...remoteResults]
+}
+
+/** remote_repos WC 파일명 검색 */
+function searchRemoteRepos(query: string): SearchResult[] {
+  const db = getDatabase()
+  const q = query.toLowerCase()
+  const results: SearchResult[] = []
+
+  try {
+    const repos = db.prepare(
+      'SELECT id, display_name, owner_name, wc_path, file_path FROM remote_repos'
+    ).all() as Array<{ id: number; display_name: string; owner_name: string | null; wc_path: string; file_path: string | null }>
+
+    for (const repo of repos) {
+      if (repo.file_path) {
+        // 단일 파일 공유
+        const fileName = repo.file_path.split('/').pop() ?? repo.file_path
+        if (fileName.toLowerCase().includes(q)) {
+          results.push({
+            repoId: 0,
+            repoName: repo.display_name,
+            filePath: repo.file_path,
+            matchType: 'filename',
+            snippet: fileName,
+            revision: 0,
+            remoteRepoId: repo.id,
+            ownerName: repo.owner_name ?? undefined,
+          })
+        }
+      } else if (repo.wc_path) {
+        // 디렉토리 WC 스캔 (최대 2레벨)
+        const wcFiles = _scanWcDirectory(repo.wc_path, q, 2)
+        for (const filePath of wcFiles) {
+          results.push({
+            repoId: 0,
+            repoName: repo.display_name,
+            filePath,
+            matchType: 'filename',
+            snippet: filePath.split('/').pop() ?? filePath,
+            revision: 0,
+            remoteRepoId: repo.id,
+            ownerName: repo.owner_name ?? undefined,
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[Search] remote_repos 검색 실패:', e)
+  }
+
+  return results
+}
+
+/** WC 디렉토리를 재귀적으로 스캔하여 쿼리와 일치하는 파일 상대경로 목록 반환 */
+function _scanWcDirectory(wcPath: string, query: string, maxDepth: number, depth = 0): string[] {
+  if (depth >= maxDepth) return []
+  const matches: string[] = []
+  try {
+    const entries = readdirSync(wcPath)
+    for (const entry of entries) {
+      if (entry === '.svn') continue
+      const entryPath = join(wcPath, entry)
+      try {
+        const stat = statSync(entryPath)
+        if (stat.isDirectory()) {
+          const sub = _scanWcDirectory(entryPath, query, maxDepth, depth + 1)
+          matches.push(...sub.map(f => `${entry}/${f}`))
+        } else if (entry.toLowerCase().includes(query)) {
+          matches.push(entry)
+        }
+      } catch { /* 건너뜀 */ }
+    }
+  } catch { /* 건너뜀 */ }
+  return matches
 }
 
 /** 검색 인덱스 재구축 (특정 저장소) */

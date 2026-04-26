@@ -3,6 +3,7 @@ import { copyFileSync, existsSync } from 'fs'
 import { getDatabase } from './DatabaseService'
 import * as SvnService from './SvnService'
 import { getLockStatus, applyAutoLockRules } from './LockService'
+import { applyAutoTags } from './TagService'
 import type { Repository, CommitLogEntry, CommitLogRequest } from '@shared/types/ipc'
 
 /**
@@ -111,10 +112,11 @@ export async function uploadAndCommit(
   // 검색 인덱스 갱신 (파일명 + 커밋 메시지)
   updateSearchIndex(repoId, filePaths.map(f => basename(f)), targetPath, finalRevision, commitMessage)
 
-  // 자동 잠금 규칙 적용 (커밋 완료 후)
+  // 자동 잠금 + 자동 태그 규칙 적용 (커밋 완료 후)
   for (const srcPath of filePaths) {
     const relPath = targetPath ? `${targetPath}/${basename(srcPath)}` : basename(srcPath)
     applyAutoLockRules(repoId, relPath)
+    applyAutoTags(repoId, relPath)
   }
 
   // 서버 동기화 hook (커넥티드 모드일 때만)
@@ -163,8 +165,9 @@ export async function uploadNewVersion(
   logActivity(repoId, 'file.commit', filePath, revision)
   updateSearchIndex(repoId, [basename(filePath)], dirname(filePath), revision, commitMessage)
 
-  // 자동 잠금 규칙 적용
+  // 자동 잠금 + 자동 태그 규칙 적용
   applyAutoLockRules(repoId, filePath)
+  applyAutoTags(repoId, filePath)
 
   return { revision }
 }

@@ -4,7 +4,7 @@
  */
 
 // 현재 스키마 버전 (마이그레이션 제어용)
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 6
 
 // 테이블 생성 SQL (실행 순서 = 외래 키 의존 순서)
 export const CREATE_TABLES_SQL = `
@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS shares (
     expires_at    DATETIME,
     is_active     BOOLEAN DEFAULT 1,
     access_count  INTEGER DEFAULT 0,
+    max_downloads INTEGER,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

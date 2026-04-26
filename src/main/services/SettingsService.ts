@@ -24,7 +24,11 @@ const APP_DEFAULTS: AppSettings = {
   sidebarWidth: 200,
   defaultView: 'list',
   shareServerPort: 9090,
-  shareExpiryMinutes: 60
+  shareExpiryMinutes: 60,
+  savedServerUrl: '',
+  savedUsername: '',
+  autoLoginDays: 0,
+  trayMinimize: false,
 }
 
 /** 앱 전역 설정 조회 */

@@ -4,6 +4,7 @@ import { basename } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDatabase } from './DatabaseService'
 import * as SvnService from './SvnService'
+import { applyAutoTags } from './TagService'
 import { FILE_WATCH_DEBOUNCE_MS, AUTO_COMMIT_DELAY_MS } from '@shared/constants'
 import type { PendingChange, Repository } from '@shared/types/ipc'
 
@@ -212,6 +213,11 @@ export async function commitPendingFiles(
       INSERT INTO activity_log (repo_id, action, file_path, revision, detail, created_at)
       VALUES (?, 'file.commit', ?, ?, '더블클릭 편집 커밋', CURRENT_TIMESTAMP)
     `).run(repoId, fp, revision)
+  }
+
+  // 자동 태그 규칙 적용
+  for (const fp of filePaths) {
+    applyAutoTags(repoId, fp)
   }
 
   // Pending에서 제거 + 감시 중지

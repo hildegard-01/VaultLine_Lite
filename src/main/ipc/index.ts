@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import log from 'electron-log'
 import type { IpcResponse } from '@shared/types/ipc'
 
 /**
@@ -17,6 +18,7 @@ export function handleIpc<T>(
       return { success: true, data } as IpcResponse<T>
     } catch (error) {
       const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'
+      log.error(`[IPC 오류] ${channel}: ${message}`)
       return { success: false, error: message } as IpcResponse<T>
     }
   })
