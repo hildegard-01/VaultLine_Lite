@@ -159,20 +159,20 @@ VaultLine 서버 V2 풀 UI를 Lite에 복원. 서버 기능은 placeholder로 �
 
 ---
 
-## Phase D — 통합 테스트 + 마무리 (2주)
+## Phase D — 통합 테스트 + 마무리 (2주) ✅ 완료
 
-- [ ] D-1. 오프라인 ↔ 커넥티드 전환 안정성 테스트
-- [ ] D-2. 웹 포탈 연동 테스트 (커밋 → 서버 이력 확인)
-- [ ] D-3. eager preview cache 테스트
-- [ ] D-4. 관리자 화면 통합 테스트
-- [ ] D-5. E2E 테스트 전체 통과
-- [ ] D-6. NSIS 인스톨러 최종 빌드 + 배포
+- [x] D-1. 오프라인 ↔ 커넥티드 전환 안정성 테스트
+- [x] D-2. 웹 포탈 연동 테스트 (커밋 → 서버 이력 확인)
+- [x] D-3. eager preview cache 테스트
+- [x] D-4. 관리자 화면 통합 테스트
+- [x] D-5. E2E 테스트 전체 통과
+- [x] D-6. NSIS 인스톨러 최종 빌드 + 배포
 
 ---
 
 ## 타임라인
 
 ```
-Phase A ✅ ─── Phase B ✅ ─── Phase C ✅ ─── Phase U ✅ ─── Phase F ✅ ─── Phase D ── 완성
+Phase A ✅ ─── Phase B ✅ ─── Phase C ✅ ─── Phase U ✅ ─── Phase F ✅ ─── Phase D ✅ ── 완성
                (별도 프로젝트)               (관리자 UI)    (기능보완)      (통합테스트)
 ```
