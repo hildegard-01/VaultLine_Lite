@@ -1,5 +1,9 @@
+import { dialog, BrowserWindow } from 'electron'
+import { join, basename } from 'path'
+import { copyFileSync } from 'fs'
 import { handleIpc } from './index'
 import * as FileManageService from '../services/FileManageService'
+import { getDatabase } from '../services/DatabaseService'
 
 /**
  * 파일 관리 IPC 핸들러 (6개 채널)
@@ -65,5 +69,42 @@ export function registerFileManageHandlers(): void {
       srcRepoId: number; destRepoId: number; srcPaths: string[]; destFolder: string; commitMessage: string
     }
     return await FileManageService.crossRepoMove(srcRepoId, destRepoId, srcPaths, destFolder, commitMessage)
+  })
+
+  // 단일 파일 저장 (다른 이름으로 저장)
+  handleIpc('file:save-as', async (args: unknown) => {
+    const { repoId, path } = args as { repoId: number; path: string }
+    const db = getDatabase()
+    const repo = db.prepare('SELECT wc_path as wcPath FROM repositories WHERE id = ?').get(repoId) as { wcPath: string } | undefined
+    if (!repo) throw new Error('저장소를 찾을 수 없습니다.')
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showSaveDialog(win!, {
+      title: '다른 이름으로 저장',
+      defaultPath: basename(path),
+      buttonLabel: '저장',
+    })
+    if (result.canceled || !result.filePath) return { saved: false }
+    copyFileSync(join(repo.wcPath, path), result.filePath)
+    return { saved: true, destPath: result.filePath }
+  })
+
+  // 다중 파일 저장 (폴더 선택)
+  handleIpc('file:bulk-save-as', async (args: unknown) => {
+    const { repoId, paths } = args as { repoId: number; paths: string[] }
+    const db = getDatabase()
+    const repo = db.prepare('SELECT wc_path as wcPath FROM repositories WHERE id = ?').get(repoId) as { wcPath: string } | undefined
+    if (!repo) throw new Error('저장소를 찾을 수 없습니다.')
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showOpenDialog(win!, {
+      title: '저장할 폴더 선택',
+      buttonLabel: '이 폴더에 저장',
+      properties: ['openDirectory'],
+    })
+    if (result.canceled || !result.filePaths[0]) return { saved: false }
+    const destFolder = result.filePaths[0]
+    for (const filePath of paths) {
+      copyFileSync(join(repo.wcPath, filePath), join(destFolder, basename(filePath)))
+    }
+    return { saved: true, destFolder, count: paths.length }
   })
 }

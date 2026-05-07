@@ -19,6 +19,7 @@ interface FileToolbarV2Props {
   onBulkMove?: () => void;
   onBulkLock?: () => void;
   onBulkShare?: () => void;
+  onBulkSaveAs?: () => void;
   onClearChecked?: () => void;
 }
 
@@ -104,7 +105,7 @@ function BtnDanger({ children, onClick }: { children: ReactNode; onClick?: () =>
 
 export function FileToolbarV2({
   itemCount, checkedCount, onUpload, onNewFolder, onLockRules,
-  onBulkDelete, onBulkMove, onBulkLock, onBulkShare, onClearChecked,
+  onBulkDelete, onBulkMove, onBulkLock, onBulkShare, onBulkSaveAs, onClearChecked,
 }: FileToolbarV2Props): React.JSX.Element {
   const [uploading, setUploading] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -130,6 +131,7 @@ export function FileToolbarV2({
         {onBulkMove && <BtnGhost onClick={onBulkMove} color={colors.blue}>이동</BtnGhost>}
         {onBulkLock && <BtnGhost onClick={onBulkLock} color={colors.purple}>잠금</BtnGhost>}
         {onBulkShare && <BtnGhost onClick={onBulkShare} color={colors.green}>공유</BtnGhost>}
+        {onBulkSaveAs && <BtnGhost onClick={onBulkSaveAs}>저장</BtnGhost>}
         {onBulkDelete && <BtnDanger onClick={onBulkDelete}>삭제</BtnDanger>}
         <div style={{ flex: 1 }} />
         <button

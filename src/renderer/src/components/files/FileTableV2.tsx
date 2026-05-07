@@ -7,7 +7,7 @@
  * 구성: FileTableV2 (메인) / formatSize / formatDate / 정렬 + 칩(잠금/태그) 렌더
  */
 
-import { useState, useCallback, useMemo, type CSSProperties } from 'react';
+import { useState, useCallback, useMemo, useEffect, type CSSProperties } from 'react';
 import { FileIcon } from '@renderer/components/shared/FileIcon';
 import { colors } from '@renderer/design/theme';
 import type { FileEntry } from '@shared/types/ipc';
@@ -25,6 +25,7 @@ interface FileTableV2Props {
   modifiedPaths?: Set<string>;
   checkedPaths?: Set<string>;
   onCheckedChange?: (paths: Set<string>) => void;
+  onSaveAs?: (file: FileEntry) => void;
 }
 
 type SortKey = 'name' | 'size' | 'date' | 'revision';
@@ -76,13 +77,23 @@ export function FileTableV2({
   files, selectedFile, onSelect, onDoubleClick,
   onDragExport, onMoveToFolder, onBookmarkToggle,
   bookmarkedPaths = new Set(), fileTagsMap = new Map(),
-  modifiedPaths = new Set(), checkedPaths, onCheckedChange,
+  modifiedPaths = new Set(), checkedPaths, onCheckedChange, onSaveAs,
 }: FileTableV2Props): React.JSX.Element {
   const [internalChecked, setInternalChecked] = useState<Set<string>>(new Set());
   const checked = checkedPaths ?? internalChecked;
   const setChecked = onCheckedChange ?? setInternalChecked;
 
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', close, { once: true });
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [ctxMenu]);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -137,6 +148,17 @@ export function FileTableV2({
 
   const handleDragLeave = useCallback(() => setDropTarget(null), []);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, file: FileEntry) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, file });
+  }, []);
+
+  const handleMenuBtn = useCallback((e: React.MouseEvent, file: FileEntry) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setCtxMenu({ x: rect.left - 120, y: rect.bottom + 4, file });
+  }, []);
+
   const handleDropRow = useCallback((e: React.DragEvent, destFolder: FileEntry) => {
     e.preventDefault();
     setDropTarget(null);
@@ -151,6 +173,7 @@ export function FileTableV2({
   }, [onMoveToFolder]);
 
   return (
+    <>
     <div style={{ flex: 1, overflow: 'auto', background: colors.bgPrimary }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
@@ -185,6 +208,7 @@ export function FileTableV2({
                 draggable
                 onClick={() => onSelect(file)}
                 onDoubleClick={() => onDoubleClick(file)}
+                onContextMenu={(e) => handleContextMenu(e, file)}
                 onDragStart={(e) => handleDragStart(e, file)}
                 onDragOver={(e) => handleDragOverRow(e, file)}
                 onDragLeave={handleDragLeave}
@@ -250,8 +274,19 @@ export function FileTableV2({
                 <td style={{ ...tdBase, textAlign: 'right', color: colors.textSub }}>
                   {formatDate(file.date)}
                 </td>
-                <td style={{ ...tdBase, textAlign: 'center', color: colors.textMuted, cursor: 'default' }}>
-                  ⋮
+                <td style={{ ...tdBase, textAlign: 'center' }}>
+                  <button
+                    onClick={(e) => handleMenuBtn(e, file)}
+                    style={{
+                      background: 'transparent', border: 'none',
+                      color: colors.textMuted, fontSize: 16, cursor: 'pointer',
+                      padding: '2px 6px', borderRadius: 4,
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget.style.background = colors.bgSecondary); }}
+                    onMouseLeave={(e) => { (e.currentTarget.style.background = 'transparent'); }}
+                  >
+                    ⋮
+                  </button>
                 </td>
               </tr>
             );
@@ -266,6 +301,43 @@ export function FileTableV2({
         </tbody>
       </table>
     </div>
+
+    {ctxMenu && (
+      <div
+        style={{
+          position: 'fixed', top: ctxMenu.y, left: ctxMenu.x,
+          background: colors.bgPrimary, border: `1px solid ${colors.border}`,
+          borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 9999, minWidth: 160, padding: '4px 0',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CtxItem onClick={() => { onDoubleClick(ctxMenu.file); setCtxMenu(null); }}>열기</CtxItem>
+        {ctxMenu.file.type === 'file' && (
+          <CtxItem onClick={() => { onSaveAs?.(ctxMenu.file); setCtxMenu(null); }}>
+            다른 이름으로 저장
+          </CtxItem>
+        )}
+      </div>
+    )}
+    </>
+  );
+}
+
+function CtxItem({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left',
+        padding: '7px 14px', fontSize: 12, cursor: 'pointer',
+        background: 'transparent', border: 'none', color: colors.text,
+      }}
+      onMouseEnter={(e) => { (e.currentTarget.style.background = colors.bgSecondary); }}
+      onMouseLeave={(e) => { (e.currentTarget.style.background = 'transparent'); }}
+    >
+      {children}
+    </button>
   );
 }
 

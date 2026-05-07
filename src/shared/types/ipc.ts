@@ -401,6 +401,8 @@ export interface IpcChannelMap {
   'file:upload-version': { req: { repoId: number; filePath: string; srcPath: string; commitMessage: string }; res: { revision: number } }
   'file:bulk-move': { req: { repoId: number; srcPaths: string[]; destFolder: string; commitMessage: string }; res: { moved: number } }
   'file:cross-repo-move': { req: { srcRepoId: number; destRepoId: number; srcPaths: string[]; destFolder: string; commitMessage: string }; res: { moved: number } }
+  'file:save-as': { req: { repoId: number; path: string }; res: { saved: boolean; destPath?: string } }
+  'file:bulk-save-as': { req: { repoId: number; paths: string[] }; res: { saved: boolean; destFolder?: string; count?: number } }
 
   // 커밋
   'commit:log': { req: CommitLogRequest; res: CommitLogEntry[] }

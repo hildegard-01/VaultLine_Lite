@@ -460,6 +460,22 @@ export function FilesPage(): React.JSX.Element {
     setMoveTarget(null)
   }, [checkedPaths])
 
+  const handleSaveAs = useCallback(async (file: FileEntry) => {
+    if (!numRepoId || file.type !== 'file') return
+    const res = await invoke('file:save-as', { repoId: numRepoId, path: file.path })
+    if (res.saved) alert(`저장 완료: ${res.destPath}`)
+  }, [numRepoId])
+
+  const handleBulkSaveAs = useCallback(async () => {
+    const paths = Array.from(checkedPaths).filter(p => {
+      const f = files.find(f => f.path === p)
+      return f?.type === 'file'
+    })
+    if (paths.length === 0) return
+    const res = await invoke('file:bulk-save-as', { repoId: numRepoId, paths })
+    if (res.saved) alert(`${res.count}개 파일을 저장했습니다.\n경로: ${res.destFolder}`)
+  }, [checkedPaths, files, numRepoId])
+
   // 이동 실행
   const handleMoveConfirm = useCallback(async (destFolder: string) => {
     const targets = moveTarget ? [moveTarget.path] : moveBulkPaths
@@ -616,6 +632,7 @@ export function FilesPage(): React.JSX.Element {
           onBulkMove={handleBulkMove}
           onBulkLock={handleBulkLock}
           onBulkShare={handleBulkShare}
+          onBulkSaveAs={handleBulkSaveAs}
           onClearChecked={() => setCheckedPaths(new Set())}
         />
         <PendingChangesBar
@@ -651,6 +668,7 @@ export function FilesPage(): React.JSX.Element {
           modifiedPaths={new Set(pendingChanges.map(p => p.filePath))}
           checkedPaths={checkedPaths}
           onCheckedChange={setCheckedPaths}
+          onSaveAs={handleSaveAs}
         />
       </div>
 
