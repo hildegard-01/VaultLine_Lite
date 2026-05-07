@@ -50,12 +50,23 @@ export function registerSystemHandlers(): void {
   // ─── 시작 프로그램 등록 ───
   handleIpc('system:startup-get', () => {
     const info = app.getLoginItemSettings()
-    return { openAtLogin: info.openAtLogin, openAsHidden: info.openAsHidden ?? false }
+    // Windows: --hidden 인자 포함 여부로 openAsHidden 판단
+    const openAsHidden = process.platform === 'win32'
+      ? (info as any).launchItems?.[0]?.args?.includes('--hidden') ?? false
+      : info.openAsHidden ?? false
+    return { openAtLogin: info.openAtLogin, openAsHidden }
   })
 
   handleIpc('system:startup-set', (args: unknown) => {
     const { openAtLogin, openAsHidden } = args as { openAtLogin: boolean; openAsHidden?: boolean }
-    app.setLoginItemSettings({ openAtLogin, openAsHidden: openAsHidden ?? false })
+    const hidden = openAsHidden ?? false
+    if (process.platform === 'win32') {
+      // Windows: openAsHidden 미지원 → --hidden 인자로 대체
+      app.setLoginItemSettings({ openAtLogin, args: openAtLogin && hidden ? ['--hidden'] : [] })
+    } else {
+      // macOS: openAsHidden 네이티브 지원
+      app.setLoginItemSettings({ openAtLogin, openAsHidden: hidden })
+    }
   })
 
   // ─── 세션 관리 ───

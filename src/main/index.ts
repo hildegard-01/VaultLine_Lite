@@ -42,13 +42,13 @@ function ensureTray(): void {
   if (_tray) return
   _tray = new Tray(getTrayIcon())
   _tray.setToolTip('VaultLine Lite')
+  const showMain = () => {
+    if (app.dock) app.dock.show()  // macOS: Dock 복원
+    mainWindow?.show()
+    mainWindow?.focus()
+  }
   const menu = Menu.buildFromTemplate([
-    {
-      label: '열기', click: () => {
-        mainWindow?.show()
-        mainWindow?.focus()
-      }
-    },
+    { label: '열기', click: showMain },
     { type: 'separator' },
     {
       label: '종료', click: () => {
@@ -58,10 +58,7 @@ function ensureTray(): void {
     },
   ])
   _tray.setContextMenu(menu)
-  _tray.on('double-click', () => {
-    mainWindow?.show()
-    mainWindow?.focus()
-  })
+  _tray.on('double-click', showMain)
 }
 
 function createWindow(): void {
@@ -82,8 +79,19 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-    mainWindow?.focus()
+    // 시작 시 숨김 처리:
+    //   Windows — setLoginItemSettings에 전달한 --hidden 인자
+    //   macOS   — openAsHidden: true 설정 시 wasOpenedAsHidden이 true
+    const startedHidden =
+      process.argv.includes('--hidden') ||
+      app.getLoginItemSettings().wasOpenedAsHidden === true
+    if (startedHidden) {
+      ensureTray()
+      if (app.dock) app.dock.hide()  // macOS: Dock에서도 숨김
+    } else {
+      mainWindow?.show()
+      mainWindow?.focus()
+    }
   })
 
   // 창 닫기: trayMinimize 설정 시 종료 대신 숨김

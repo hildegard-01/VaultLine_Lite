@@ -441,7 +441,7 @@ function SystemTab() {
           <div className="flex items-center justify-between">
             <div>
               <span className="text-[12px]">트레이 최소화</span>
-              <p className="text-[10px] text-gray-400 mt-0.5">창 닫기 시 트레이에서 계속 실행 (재시작 후 적용)</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">창 닫기 시 트레이에서 계속 실행</p>
             </div>
             <input
               type="checkbox"
